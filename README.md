@@ -1,2 +1,2 @@
 UNOFFICIAL version
-For the official version, please vist https://github.com/CJBok/Cheat-Tables
+For the official version, please visit https://github.com/CJBok/Cheat-Tables
