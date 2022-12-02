@@ -1,16 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<CheatTable CheatEngineTableVersion="34">
+<CheatTable CheatEngineTableVersion="42">
   <CheatEntries>
     <CheatEntry>
       <ID>3530</ID>
       <Description>"&lt;- ENABLE AFTER LOADING GAME"</Description>
-      <Options moHideChildren="1" moDeactivateChildrenAsWell="1"/>
-      <LastState/>
+      <Options moHideChildren="1" moActivateChildrenAsWell="1" moDeactivateChildrenAsWell="1"/>
       <Color>0000FF</Color>
       <VariableType>Auto Assembler Script</VariableType>
       <AssemblerScript>{ Game   : Animal Crossing New Horizon
   Version: 2.0.6
-  Date   : 2022-12-02
+  Date   : 2022-12-03
   Author : CJB/Snivy_Lei
 }
 
@@ -44,14 +43,40 @@ elseif process == 'Ryujinx.exe' then
   -- Changed
 end
 
-unregisterSymbol('heap')
-registerSymbol('heap','heapaddress - A1FD28 + 8B1E0 + 12CFCA8 + 3000 + 13EC248 + 1570F68 + 11000 + 400000 - 40000000')
--- Changed: ADD - A1FD28 + 8B1E0 + 12CFCA8 + 3000 + 13EC248 + 1570F68 + 11000 + 400000 - 40000000
-
 -- CHANGED --
 unregisterSymbol('heap_bak')
 registerSymbol('heap_bak','heapaddress')
+
+allocedmem = allocateMemory(1024)
+last_activePlayer = nil
+activePlayer = 0
+playerOffset = 0
+villagersOffset = 0
+
+unregisterSymbol('activePlayerMem')
+registerSymbol('activePlayerMem', 'allocedmem + 0')
+-- writeInteger(allocedmem, 0x11B968)
+
+unregisterSymbol('heapOffsetMem')
+registerSymbol('heapOffsetMem', 'allocedmem + 4')
 -- ---------- --
+
+-- ---------- --
+last_heapOffset = nil
+heapOffset = -0x40000000
+heap_bAdr = 'heapaddress - A1FD28 + 8B1E0 + 12CFCA8 + 3000 + 13EC248 + 1570F68 + 11000 + 400000'
+
+unregisterSymbol('heap')
+registerSymbol('heap',heap_bAdr..string.format('+%X',heapOffset))
+
+if readInteger('heap + AC43C4C8 - C10 + B0B8') == 0 then -- personalid
+  heapOffset = 0
+  registerSymbol('heap',heap_bAdr..string.format('+%X',heapOffset))
+end
+writeQword('heapOffsetMem', heapOffset)
+
+-- registerSymbol('heap','heapaddress - A1FD28 + 8B1E0 + 12CFCA8 + 3000 + 13EC248 + 1570F68 + 11000 + 400000 - 40000000')
+-- Changed: ADD - A1FD28 + 8B1E0 + 12CFCA8 + 3000 + 13EC248 + 1570F68 + 11000 + 400000 - 40000000
 
 CheatTimerInterval = 100
 CheatTimer = nil
@@ -63,8 +88,30 @@ cht05 = nil
 
 local function CheatTimer_tick( timer )
   if not getAddress('heap') and getAddress('heap') == 0 then return end
+  
+  -- CHANGED --
+  heapOffset = readQword('heapOffsetMem')
+  if heapOffset == nil then heapOffset = last_heapOffset end
+  if last_heapOffset ~= heapOffset then
+    last_heapOffset = heapOffset
+    registerSymbol('heap',heap_bAdr..string.format('+%X',heapOffset))
+    unregisterSymbol('player')
+  end
+
+  activePlayer = readInteger('activePlayerMem')
+  if activePlayer == nil then activePlayer = last_activePlayer end
+  if last_activePlayer ~= activePlayer then
+    last_activePlayer = activePlayer
+
+    playerOffset = 0x11B968 * activePlayer
+    villagersOffset = 0x5F0 * activePlayer + 1
+
+    unregisterSymbol('player')
+  end
+  -- ---------- --
 
   if( readQword('player') == nil ) then
+  
     unregisterSymbol('fps')
     -- Changed --
     if process == 'Ryujinx.exe' then
@@ -79,7 +126,8 @@ local function CheatTimer_tick( timer )
     -- Changed: ADD - 160 - 6D420 + 28D4F8 - 1B4FC8
 
     unregisterSymbol('player')
-    registerSymbol('player', 'heap + AC43C4C8 - C10')
+	registerSymbol('player', 'heap + AC43C4C8 - C10'..string.format('+%X',playerOffset))
+    -- registerSymbol('player', 'heap + AC43C4C8 - C10')
 	-- Changed: ADD - C10
 
     unregisterSymbol('items')
@@ -135,10 +183,15 @@ local function CheatTimer_tick( timer )
 	
 	-- CHANGED --
 	unregisterSymbol('poki')
-    registerSymbol('poki', 'player + 1C59D48')
+    registerSymbol('poki', 'heap + AE095600') -- player + 1C59D48
 	
 	unregisterSymbol('visitorNPC')
     registerSymbol('visitorNPC', 'island + 462158')
+	
+    if (readQword('player') ~= nil) then
+      local al = getAddressList()
+      for i=0, al.Count-1 do al[i].reinterpret() end
+    end
 	-- ---------- --
 
   end
@@ -216,6 +269,14 @@ unregisterSymbol('tooluses')
 -- CHANGED --
 unregisterSymbol('poki')
 unregisterSymbol('visitorNPC')
+
+unregisterSymbol('activePlayerMem')
+unregisterSymbol('heapOffsetMem')
+
+deAlloc(allocedmem)
+allocedmem = nil
+playerOffset = 0
+villagersOffset = 0
 -- ---------- --
 
 </AssemblerScript>
@@ -224,22 +285,51 @@ unregisterSymbol('visitorNPC')
           <ID>767</ID>
           <Description>"V2.0.6"</Description>
           <Options moHideChildren="1" moDeactivateChildrenAsWell="1"/>
-          <LastState Value="" RealAddress="00000000"/>
           <Color>FF0000</Color>
           <GroupHeader>1</GroupHeader>
           <CheatEntries>
             <CheatEntry>
+              <ID>5033</ID>
+              <Description>"HEAP OFFSET (change when value abnormal)"</Description>
+              <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">FFFFFFFF80000000:-0x80000000
+FFFFFFFFC0000000:-0x40000000 (Default)
+0000000000000000:0 (Probably)
+0000000040000000:+0x40000000
+0000000080000000:+0x80000000
+</DropDownList>
+              <ShowAsHex>1</ShowAsHex>
+              <ShowAsSigned>1</ShowAsSigned>
+              <Color>008000</Color>
+              <VariableType>8 Bytes</VariableType>
+              <Address>heapOffsetMem</Address>
+            </CheatEntry>
+            <CheatEntry>
+              <ID>5034</ID>
+              <Description>"PLAYER OFFSET (change to switch profiles)"</Description>
+              <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:Ｐ１
+1:Ｐ２
+2:Ｐ３
+3:Ｐ４
+4:Ｐ５
+5:Ｐ６
+6:Ｐ７
+7:Ｐ８
+</DropDownList>
+              <ShowAsSigned>0</ShowAsSigned>
+              <Color>008000</Color>
+              <VariableType>4 Bytes</VariableType>
+              <Address>activePlayerMem</Address>
+            </CheatEntry>
+            <CheatEntry>
               <ID>783</ID>
               <Description>"CHEATS"</Description>
               <Options moHideChildren="1" moDeactivateChildrenAsWell="1"/>
-              <LastState Value="" RealAddress="00000000"/>
               <Color>FF0000</Color>
               <GroupHeader>1</GroupHeader>
               <CheatEntries>
                 <CheatEntry>
                   <ID>784</ID>
                   <Description>"Infinite Bells"</Description>
-                  <LastState/>
                   <Color>FF0000</Color>
                   <VariableType>Auto Assembler Script</VariableType>
                   <AssemblerScript>[ENABLE]
@@ -259,7 +349,6 @@ cht01 = false
                 <CheatEntry>
                   <ID>789</ID>
                   <Description>"Unbreakable Tools"</Description>
-                  <LastState/>
                   <Color>FF0000</Color>
                   <VariableType>Auto Assembler Script</VariableType>
                   <AssemblerScript>[ENABLE]
@@ -279,7 +368,6 @@ cht03 = false
                 <CheatEntry>
                   <ID>787</ID>
                   <Description>"Infinite Base Resources"</Description>
-                  <LastState/>
                   <Color>FF0000</Color>
                   <VariableType>Auto Assembler Script</VariableType>
                   <AssemblerScript>[ENABLE]
@@ -299,7 +387,6 @@ cht02 = false
                 <CheatEntry>
                   <ID>2844</ID>
                   <Description>"Increased Stack Sizes"</Description>
-                  <LastState/>
                   <Color>FF0000</Color>
                   <VariableType>Auto Assembler Script</VariableType>
                   <AssemblerScript>[ENABLE]
@@ -319,7 +406,6 @@ cht04 = false
                 <CheatEntry>
                   <ID>3529</ID>
                   <Description>"Infinite Food"</Description>
-                  <LastState/>
                   <Color>FF0000</Color>
                   <VariableType>Auto Assembler Script</VariableType>
                   <AssemblerScript>[ENABLE]
@@ -354,14 +440,12 @@ writeBytes('food', 0)
               <ID>238</ID>
               <Description>"PLAYER"</Description>
               <Options moHideChildren="1" moDeactivateChildrenAsWell="1"/>
-              <LastState Value="" RealAddress="00000000"/>
               <Color>FF0000</Color>
               <GroupHeader>1</GroupHeader>
               <CheatEntries>
                 <CheatEntry>
                   <ID>241</ID>
                   <Description>"Player Name"</Description>
-                  <LastState RealAddress="1E94A1F1AF0"/>
                   <VariableType>String</VariableType>
                   <Length>20</Length>
                   <Unicode>1</Unicode>
@@ -369,23 +453,18 @@ writeBytes('food', 0)
                   <ZeroTerminate>1</ZeroTerminate>
                   <Address>personalid+20</Address>
                 </CheatEntry>
-				
-    <CheatEntry>
-      <ID>5023</ID>
-      <Description>"Gender"</Description>
-      <DropDownList ReadOnly="1" DisplayValueAsItem="1">0:Masculine
+                <CheatEntry>
+                  <ID>5023</ID>
+                  <Description>"Gender"</Description>
+                  <DropDownList ReadOnly="1" DisplayValueAsItem="1">0:Masculine
 1:Feminine
 </DropDownList>
-      <LastState Value="0" RealAddress="28DE1241CB4"/>
-      <VariableType>4 Bytes</VariableType>
-      <Address>personalid+20+14</Address>
-    </CheatEntry>
-
-				
+                  <VariableType>4 Bytes</VariableType>
+                  <Address>personalid+20+14</Address>
+                </CheatEntry>
                 <CheatEntry>
                   <ID>788</ID>
                   <Description>"Bells Carrying"</Description>
-                  <LastState Value="90000" RealAddress="1E94A21D5E8"/>
                   <VariableType>Custom</VariableType>
                   <CustomType>ACNH Integer</CustomType>
                   <Address>wallet</Address>
@@ -393,7 +472,6 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>248</ID>
                   <Description>"Bells Savings"</Description>
-                  <LastState Value="545294760" RealAddress="1E94A23F9FC"/>
                   <VariableType>Custom</VariableType>
                   <CustomType>ACNH Integer</CustomType>
                   <Address>bank</Address>
@@ -401,7 +479,6 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>236</ID>
                   <Description>"Nook Mile Points"</Description>
-                  <LastState Value="885569" RealAddress="1E94A1F7FA0"/>
                   <ShowAsSigned>0</ShowAsSigned>
                   <VariableType>Custom</VariableType>
                   <CustomType>ACNH Integer</CustomType>
@@ -409,24 +486,21 @@ writeBytes('food', 0)
                 </CheatEntry>
                 <CheatEntry>
                   <ID>4159</ID>
-                  <Description>"Poki Carrying"</Description>
-                  <LastState Value="6000" RealAddress="234F1320910"/>
-				  <VariableType>Custom</VariableType>
+                  <Description>"Poki Carrying (Current)"</Description>
+                  <VariableType>Custom</VariableType>
                   <CustomType>ACNH Integer</CustomType>
                   <Address>poki</Address>
                 </CheatEntry>
-				<CheatEntry>
-				  <ID>5032</ID>
-				  <Description>"Poki Savings"</Description>
-				  <LastState Value="100000" RealAddress="27F9C170920"/>
-				  <VariableType>Custom</VariableType>
-				  <CustomType>ACNH Integer</CustomType>
-				  <Address>poki+0x10</Address>
-				</CheatEntry>
+                <CheatEntry>
+                  <ID>5032</ID>
+                  <Description>"Poki Savings (Current)"</Description>
+                  <VariableType>Custom</VariableType>
+                  <CustomType>ACNH Integer</CustomType>
+                  <Address>poki+0x10</Address>
+                </CheatEntry>
                 <CheatEntry>
                   <ID>254</ID>
                   <Description>"Held Item Durability"</Description>
-                  <LastState Value="0" RealAddress="1E94A1E7CDE"/>
                   <ShowAsSigned>0</ShowAsSigned>
                   <VariableType>Byte</VariableType>
                   <Address>tooluses</Address>
@@ -434,7 +508,6 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>786</ID>
                   <Description>"Food Eaten"</Description>
-                  <LastState Value="0" RealAddress="1E9532F3798"/>
                   <ShowAsSigned>0</ShowAsSigned>
                   <VariableType>Byte</VariableType>
                   <Address>food</Address>
@@ -442,106 +515,91 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>4154</ID>
                   <Description>"Fishing Tourney Points"</Description>
-                  <LastState Value="189" RealAddress="1E94A1F1B7E"/>
                   <VariableType>2 Bytes</VariableType>
                   <Address>personalid+AE</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>4155</ID>
                   <Description>"Bug Off Points"</Description>
-                  <LastState Value="548" RealAddress="1E94A1F1B80"/>
                   <VariableType>2 Bytes</VariableType>
                   <Address>personalid+B0</Address>
                 </CheatEntry>
-				
-    <CheatEntry>
-      <ID>5026</ID>
-      <Description>"APPEARANCE"</Description>
-      <Options moHideChildren="1"/>
-      <LastState Value="" Activated="1" RealAddress="00000000"/>
-      <Color>FF0000</Color>
-      <GroupHeader>1</GroupHeader>
-      <CheatEntries>
-        <CheatEntry>
-          <ID>5015</ID>
-          <Description>"Hair"</Description>
-          <LastState Value="9" RealAddress="28DE12389F0"/>
-          <ShowAsSigned>0</ShowAsSigned>
-          <VariableType>Byte</VariableType>
-          <Address>player+1E28+0</Address>
-        </CheatEntry>
-        <CheatEntry>
-          <ID>5013</ID>
-          <Description>"Hair Color"</Description>
-          <LastState Value="1" RealAddress="28DE12389F1"/>
-          <ShowAsSigned>0</ShowAsSigned>
-          <VariableType>Byte</VariableType>
-          <Address>player+1E28+1</Address>
-        </CheatEntry>
-        <CheatEntry>
-          <ID>5014</ID>
-          <Description>"Eye"</Description>
-          <LastState Value="1" RealAddress="28DE12389F2"/>
-          <ShowAsSigned>0</ShowAsSigned>
-          <VariableType>Byte</VariableType>
-          <Address>player+1E28+2</Address>
-        </CheatEntry>
-        <CheatEntry>
-          <ID>5016</ID>
-          <Description>"Eye Color"</Description>
-          <LastState Value="0" RealAddress="28DE12389F3"/>
-          <ShowAsSigned>0</ShowAsSigned>
-          <VariableType>Byte</VariableType>
-          <Address>player+1E28+3</Address>
-        </CheatEntry>
-        <CheatEntry>
-          <ID>5017</ID>
-          <Description>"Nose"</Description>
-          <LastState Value="0" RealAddress="28DE12389F4"/>
-          <ShowAsSigned>0</ShowAsSigned>
-          <VariableType>Byte</VariableType>
-          <Address>player+1E28+4</Address>
-        </CheatEntry>
-        <CheatEntry>
-          <ID>5018</ID>
-          <Description>"Mouth"</Description>
-          <LastState Value="3" RealAddress="28DE12389F5"/>
-          <ShowAsSigned>0</ShowAsSigned>
-          <VariableType>Byte</VariableType>
-          <Address>player+1E28+5</Address>
-        </CheatEntry>
-        <CheatEntry>
-          <ID>5019</ID>
-          <Description>"Cheek"</Description>
-          <LastState Value="2" RealAddress="28DE12389F6"/>
-          <ShowAsSigned>0</ShowAsSigned>
-          <VariableType>Byte</VariableType>
-          <Address>player+1E28+6</Address>
-        </CheatEntry>
-        <CheatEntry>
-          <ID>5020</ID>
-          <Description>"Cheek Color"</Description>
-          <LastState Value="1" RealAddress="28DE12389F7"/>
-          <ShowAsSigned>0</ShowAsSigned>
-          <VariableType>Byte</VariableType>
-          <Address>player+1E28+7</Address>
-        </CheatEntry>
-        <CheatEntry>
-          <ID>5021</ID>
-          <Description>"Body Color"</Description>
-          <LastState Value="0" RealAddress="28DE12389F8"/>
-          <ShowAsSigned>0</ShowAsSigned>
-          <VariableType>Byte</VariableType>
-          <Address>player+1E28+8</Address>
-        </CheatEntry>
-      </CheatEntries>
-    </CheatEntry>
-				
+                <CheatEntry>
+                  <ID>5026</ID>
+                  <Description>"APPEARANCE"</Description>
+                  <Options moHideChildren="1"/>
+                  <Color>FF0000</Color>
+                  <GroupHeader>1</GroupHeader>
+                  <CheatEntries>
+                    <CheatEntry>
+                      <ID>5015</ID>
+                      <Description>"Hair"</Description>
+                      <ShowAsSigned>0</ShowAsSigned>
+                      <VariableType>Byte</VariableType>
+                      <Address>player+1E28+0</Address>
+                    </CheatEntry>
+                    <CheatEntry>
+                      <ID>5013</ID>
+                      <Description>"Hair Color"</Description>
+                      <ShowAsSigned>0</ShowAsSigned>
+                      <VariableType>Byte</VariableType>
+                      <Address>player+1E28+1</Address>
+                    </CheatEntry>
+                    <CheatEntry>
+                      <ID>5014</ID>
+                      <Description>"Eye"</Description>
+                      <ShowAsSigned>0</ShowAsSigned>
+                      <VariableType>Byte</VariableType>
+                      <Address>player+1E28+2</Address>
+                    </CheatEntry>
+                    <CheatEntry>
+                      <ID>5016</ID>
+                      <Description>"Eye Color"</Description>
+                      <ShowAsSigned>0</ShowAsSigned>
+                      <VariableType>Byte</VariableType>
+                      <Address>player+1E28+3</Address>
+                    </CheatEntry>
+                    <CheatEntry>
+                      <ID>5017</ID>
+                      <Description>"Nose"</Description>
+                      <ShowAsSigned>0</ShowAsSigned>
+                      <VariableType>Byte</VariableType>
+                      <Address>player+1E28+4</Address>
+                    </CheatEntry>
+                    <CheatEntry>
+                      <ID>5018</ID>
+                      <Description>"Mouth"</Description>
+                      <ShowAsSigned>0</ShowAsSigned>
+                      <VariableType>Byte</VariableType>
+                      <Address>player+1E28+5</Address>
+                    </CheatEntry>
+                    <CheatEntry>
+                      <ID>5019</ID>
+                      <Description>"Cheek"</Description>
+                      <ShowAsSigned>0</ShowAsSigned>
+                      <VariableType>Byte</VariableType>
+                      <Address>player+1E28+6</Address>
+                    </CheatEntry>
+                    <CheatEntry>
+                      <ID>5020</ID>
+                      <Description>"Cheek Color"</Description>
+                      <ShowAsSigned>0</ShowAsSigned>
+                      <VariableType>Byte</VariableType>
+                      <Address>player+1E28+7</Address>
+                    </CheatEntry>
+                    <CheatEntry>
+                      <ID>5021</ID>
+                      <Description>"Body Color"</Description>
+                      <ShowAsSigned>0</ShowAsSigned>
+                      <VariableType>Byte</VariableType>
+                      <Address>player+1E28+8</Address>
+                    </CheatEntry>
+                  </CheatEntries>
+                </CheatEntry>
                 <CheatEntry>
                   <ID>421</ID>
                   <Description>"INVENTORY 01-10"</Description>
                   <Options moHideChildren="1" moDeactivateChildrenAsWell="1"/>
-                  <LastState/>
                   <Color>FF0000</Color>
                   <VariableType>Auto Assembler Script</VariableType>
                   <AssemblerScript>[ENABLE]
@@ -552,7 +610,6 @@ writeBytes('food', 0)
                       <ID>3055</ID>
                       <Description>"------- ITEM 1 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="2377" RealAddress="1E94A21D530"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*0</Address>
@@ -560,7 +617,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3056</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D534"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*0</Address>
@@ -568,21 +624,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3057</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D536"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*0</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3058</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D532"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*0</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3059</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D533"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*0</Address>
                     </CheatEntry>
@@ -590,7 +643,6 @@ writeBytes('food', 0)
                       <ID>3060</ID>
                       <Description>"------- ITEM 2 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="2099" RealAddress="1E94A21D538"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*1</Address>
@@ -598,7 +650,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3061</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D53C"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*1</Address>
@@ -606,21 +657,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3062</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="44" RealAddress="1E94A21D53E"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*1</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3063</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D53A"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*1</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3064</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D53B"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*1</Address>
                     </CheatEntry>
@@ -628,7 +676,6 @@ writeBytes('food', 0)
                       <ID>3065</ID>
                       <Description>"------- ITEM 3 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="2100" RealAddress="1E94A21D540"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*2</Address>
@@ -636,7 +683,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3066</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D544"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*2</Address>
@@ -644,21 +690,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3067</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="32" RealAddress="1E94A21D546"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*2</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3068</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D542"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*2</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3069</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D543"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*2</Address>
                     </CheatEntry>
@@ -666,7 +709,6 @@ writeBytes('food', 0)
                       <ID>3070</ID>
                       <Description>"------- ITEM 4 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="5784" RealAddress="1E94A21D548"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*3</Address>
@@ -674,7 +716,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3071</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D54C"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*3</Address>
@@ -682,21 +723,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3072</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="32" RealAddress="1E94A21D54E"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*3</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3073</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D54A"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*3</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3074</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D54B"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*3</Address>
                     </CheatEntry>
@@ -704,7 +742,6 @@ writeBytes('food', 0)
                       <ID>3075</ID>
                       <Description>"------- ITEM 5 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="4703" RealAddress="1E94A21D550"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*4</Address>
@@ -712,7 +749,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3076</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D554"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*4</Address>
@@ -720,21 +756,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3077</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D556"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*4</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3078</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D552"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*4</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3079</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D553"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*4</Address>
                     </CheatEntry>
@@ -742,7 +775,6 @@ writeBytes('food', 0)
                       <ID>3080</ID>
                       <Description>"------- ITEM 6 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="2615" RealAddress="1E94A21D558"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*5</Address>
@@ -750,7 +782,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3081</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D55C"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*5</Address>
@@ -758,21 +789,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3082</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D55E"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*5</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3083</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D55A"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*5</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3084</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D55B"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*5</Address>
                     </CheatEntry>
@@ -780,7 +808,6 @@ writeBytes('food', 0)
                       <ID>3085</ID>
                       <Description>"------- ITEM 7 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="8578" RealAddress="1E94A21D560"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*6</Address>
@@ -788,7 +815,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3086</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D564"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*6</Address>
@@ -796,21 +822,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3087</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="4" RealAddress="1E94A21D566"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*6</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3088</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D562"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*6</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3089</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D563"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*6</Address>
                     </CheatEntry>
@@ -818,7 +841,6 @@ writeBytes('food', 0)
                       <ID>3090</ID>
                       <Description>"------- ITEM 8 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="8533" RealAddress="1E94A21D568"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*7</Address>
@@ -826,7 +848,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3091</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D56C"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*7</Address>
@@ -834,21 +855,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3092</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D56E"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*7</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3093</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D56A"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*7</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3094</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D56B"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*7</Address>
                     </CheatEntry>
@@ -856,7 +874,6 @@ writeBytes('food', 0)
                       <ID>3095</ID>
                       <Description>"------- ITEM 9 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="6919" RealAddress="1E94A21D570"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*8</Address>
@@ -864,7 +881,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3096</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D574"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*8</Address>
@@ -872,21 +888,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3097</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D576"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*8</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3098</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D572"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*8</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3099</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D573"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*8</Address>
                     </CheatEntry>
@@ -894,7 +907,6 @@ writeBytes('food', 0)
                       <ID>3100</ID>
                       <Description>"------- ITEM 10 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="4549" RealAddress="1E94A21D578"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*9</Address>
@@ -902,7 +914,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3101</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="10" RealAddress="1E94A21D57C"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*9</Address>
@@ -910,21 +921,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3102</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D57E"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*9</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3103</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D57A"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*9</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3104</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D57B"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*9</Address>
                     </CheatEntry>
@@ -934,7 +942,6 @@ writeBytes('food', 0)
                   <ID>422</ID>
                   <Description>"INVENTORY 11-20"</Description>
                   <Options moHideChildren="1" moDeactivateChildrenAsWell="1"/>
-                  <LastState/>
                   <Color>FF0000</Color>
                   <VariableType>Auto Assembler Script</VariableType>
                   <AssemblerScript>[ENABLE]
@@ -945,7 +952,6 @@ writeBytes('food', 0)
                       <ID>3105</ID>
                       <Description>"------- ITEM 11 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="3090" RealAddress="1E94A21D580"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*a</Address>
@@ -953,7 +959,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3106</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="30" RealAddress="1E94A21D584"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*a</Address>
@@ -961,21 +966,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3107</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D586"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*a</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3108</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D582"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*a</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3109</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D583"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*a</Address>
                     </CheatEntry>
@@ -983,7 +985,6 @@ writeBytes('food', 0)
                       <ID>3110</ID>
                       <Description>"------- ITEM 12 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="2777" RealAddress="1E94A21D588"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*b</Address>
@@ -991,7 +992,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3111</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="8" RealAddress="1E94A21D58C"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*b</Address>
@@ -999,21 +999,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3112</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D58E"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*b</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3113</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D58A"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*b</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3114</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D58B"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*b</Address>
                     </CheatEntry>
@@ -1021,7 +1018,6 @@ writeBytes('food', 0)
                       <ID>3115</ID>
                       <Description>"------- ITEM 13 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="5851" RealAddress="1E94A21D590"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*c</Address>
@@ -1029,7 +1025,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3116</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="10" RealAddress="1E94A21D594"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*c</Address>
@@ -1037,21 +1032,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3117</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D596"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*c</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3118</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D592"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*c</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3119</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D593"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*c</Address>
                     </CheatEntry>
@@ -1059,7 +1051,6 @@ writeBytes('food', 0)
                       <ID>3120</ID>
                       <Description>"------- ITEM 14 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="2511" RealAddress="1E94A21D598"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*d</Address>
@@ -1067,7 +1058,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3121</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="30" RealAddress="1E94A21D59C"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*d</Address>
@@ -1075,21 +1065,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3122</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D59E"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*d</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3123</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D59A"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*d</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3124</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D59B"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*d</Address>
                     </CheatEntry>
@@ -1097,7 +1084,6 @@ writeBytes('food', 0)
                       <ID>3125</ID>
                       <Description>"------- ITEM 15 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="2502" RealAddress="1E94A21D5A0"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*e</Address>
@@ -1105,7 +1091,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3126</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="30" RealAddress="1E94A21D5A4"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*e</Address>
@@ -1113,21 +1098,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3127</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D5A6"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*e</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3128</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D5A2"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*e</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3129</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D5A3"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*e</Address>
                     </CheatEntry>
@@ -1135,7 +1117,6 @@ writeBytes('food', 0)
                       <ID>3130</ID>
                       <Description>"------- ITEM 16 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="2500" RealAddress="1E94A21D5A8"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*f</Address>
@@ -1143,7 +1124,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3131</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="16" RealAddress="1E94A21D5AC"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*f</Address>
@@ -1151,21 +1131,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3132</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D5AE"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*f</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3133</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D5AA"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*f</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3134</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D5AB"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*f</Address>
                     </CheatEntry>
@@ -1173,7 +1150,6 @@ writeBytes('food', 0)
                       <ID>3135</ID>
                       <Description>"------- ITEM 17 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="2767" RealAddress="1E94A21D5B0"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*10</Address>
@@ -1181,7 +1157,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3136</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="25" RealAddress="1E94A21D5B4"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*10</Address>
@@ -1189,21 +1164,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3137</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D5B6"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*10</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3138</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D5B2"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*10</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3139</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D5B3"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*10</Address>
                     </CheatEntry>
@@ -1211,7 +1183,6 @@ writeBytes('food', 0)
                       <ID>3140</ID>
                       <Description>"------- ITEM 18 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="2768" RealAddress="1E94A21D5B8"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*11</Address>
@@ -1219,7 +1190,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3141</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="22" RealAddress="1E94A21D5BC"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*11</Address>
@@ -1227,21 +1197,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3142</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D5BE"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*11</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3143</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D5BA"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*11</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3144</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D5BB"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*11</Address>
                     </CheatEntry>
@@ -1249,7 +1216,6 @@ writeBytes('food', 0)
                       <ID>3145</ID>
                       <Description>"------- ITEM 19 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="2769" RealAddress="1E94A21D5C0"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*12</Address>
@@ -1257,7 +1223,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3146</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="25" RealAddress="1E94A21D5C4"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*12</Address>
@@ -1265,21 +1230,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3147</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D5C6"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*12</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3148</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D5C2"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*12</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3149</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D5C3"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*12</Address>
                     </CheatEntry>
@@ -1287,7 +1249,6 @@ writeBytes('food', 0)
                       <ID>3150</ID>
                       <Description>"------- ITEM 20 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="7145" RealAddress="1E94A21D5C8"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+0+8*13</Address>
@@ -1295,7 +1256,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3151</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="2" RealAddress="1E94A21D5CC"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket2+4+8*13</Address>
@@ -1303,21 +1263,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3152</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D5CE"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket2+6+8*13</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3153</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D5CA"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+2+8*13</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3154</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="2" RealAddress="1E94A21D5CB"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket2+3+8*13</Address>
                     </CheatEntry>
@@ -1327,7 +1284,6 @@ writeBytes('food', 0)
                   <ID>423</ID>
                   <Description>"INVENTORY 21-30"</Description>
                   <Options moHideChildren="1"/>
-                  <LastState/>
                   <Color>FF0000</Color>
                   <VariableType>Auto Assembler Script</VariableType>
                   <AssemblerScript>[ENABLE]
@@ -1338,7 +1294,6 @@ writeBytes('food', 0)
                       <ID>3155</ID>
                       <Description>"------- ITEM 21 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="4148" RealAddress="1E94A21D478"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*0</Address>
@@ -1346,7 +1301,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3156</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D47C"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*0</Address>
@@ -1354,21 +1308,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3157</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D47E"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*0</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3158</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D47A"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*0</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3159</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D47B"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*0</Address>
                     </CheatEntry>
@@ -1376,7 +1327,6 @@ writeBytes('food', 0)
                       <ID>3160</ID>
                       <Description>"------- ITEM 22 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D480"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*1</Address>
@@ -1384,7 +1334,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3161</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D484"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*1</Address>
@@ -1392,21 +1341,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3162</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D486"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*1</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3163</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D482"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*1</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3164</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D483"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*1</Address>
                     </CheatEntry>
@@ -1414,7 +1360,6 @@ writeBytes('food', 0)
                       <ID>3165</ID>
                       <Description>"------- ITEM 23 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D488"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*2</Address>
@@ -1422,7 +1367,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3166</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D48C"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*2</Address>
@@ -1430,21 +1374,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3167</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D48E"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*2</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3168</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D48A"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*2</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3169</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D48B"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*2</Address>
                     </CheatEntry>
@@ -1452,7 +1393,6 @@ writeBytes('food', 0)
                       <ID>3170</ID>
                       <Description>"------- ITEM 24 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D490"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*3</Address>
@@ -1460,7 +1400,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3171</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D494"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*3</Address>
@@ -1468,21 +1407,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3172</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D496"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*3</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3173</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D492"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*3</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3174</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D493"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*3</Address>
                     </CheatEntry>
@@ -1490,7 +1426,6 @@ writeBytes('food', 0)
                       <ID>3175</ID>
                       <Description>"------- ITEM 25 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D498"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*4</Address>
@@ -1498,7 +1433,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3176</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D49C"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*4</Address>
@@ -1506,21 +1440,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3177</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D49E"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*4</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3178</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D49A"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*4</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3179</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D49B"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*4</Address>
                     </CheatEntry>
@@ -1528,7 +1459,6 @@ writeBytes('food', 0)
                       <ID>3180</ID>
                       <Description>"------- ITEM 26 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D4A0"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*5</Address>
@@ -1536,7 +1466,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3181</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D4A4"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*5</Address>
@@ -1544,21 +1473,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3182</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4A6"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*5</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3183</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4A2"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*5</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3184</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4A3"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*5</Address>
                     </CheatEntry>
@@ -1566,7 +1492,6 @@ writeBytes('food', 0)
                       <ID>3185</ID>
                       <Description>"------- ITEM 27 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D4A8"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*6</Address>
@@ -1574,7 +1499,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3186</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D4AC"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*6</Address>
@@ -1582,21 +1506,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3187</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4AE"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*6</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3188</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4AA"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*6</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3189</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4AB"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*6</Address>
                     </CheatEntry>
@@ -1604,7 +1525,6 @@ writeBytes('food', 0)
                       <ID>3190</ID>
                       <Description>"------- ITEM 28 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D4B0"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*7</Address>
@@ -1612,7 +1532,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3191</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D4B4"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*7</Address>
@@ -1620,21 +1539,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3192</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4B6"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*7</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3193</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4B2"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*7</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3194</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4B3"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*7</Address>
                     </CheatEntry>
@@ -1642,7 +1558,6 @@ writeBytes('food', 0)
                       <ID>3195</ID>
                       <Description>"------- ITEM 29 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D4B8"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*8</Address>
@@ -1650,7 +1565,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3196</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D4BC"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*8</Address>
@@ -1658,21 +1572,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3197</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4BE"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*8</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3198</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4BA"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*8</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3199</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4BB"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*8</Address>
                     </CheatEntry>
@@ -1680,7 +1591,6 @@ writeBytes('food', 0)
                       <ID>3200</ID>
                       <Description>"------- ITEM 30 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D4C0"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*9</Address>
@@ -1688,7 +1598,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3201</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D4C4"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*9</Address>
@@ -1696,21 +1605,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3202</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4C6"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*9</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3203</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4C2"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*9</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3204</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4C3"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*9</Address>
                     </CheatEntry>
@@ -1720,7 +1626,6 @@ writeBytes('food', 0)
                   <ID>424</ID>
                   <Description>"INVENTORY 31-40"</Description>
                   <Options moHideChildren="1"/>
-                  <LastState/>
                   <Color>FF0000</Color>
                   <VariableType>Auto Assembler Script</VariableType>
                   <AssemblerScript>[ENABLE]
@@ -1731,7 +1636,6 @@ writeBytes('food', 0)
                       <ID>3205</ID>
                       <Description>"------- ITEM 31 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D4C8"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*a</Address>
@@ -1739,7 +1643,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3206</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D4CC"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*a</Address>
@@ -1747,21 +1650,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3207</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4CE"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*a</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3208</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4CA"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*a</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3209</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4CB"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*a</Address>
                     </CheatEntry>
@@ -1769,7 +1669,6 @@ writeBytes('food', 0)
                       <ID>3210</ID>
                       <Description>"------- ITEM 32 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D4D0"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*b</Address>
@@ -1777,7 +1676,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3211</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D4D4"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*b</Address>
@@ -1785,21 +1683,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3212</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4D6"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*b</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3213</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4D2"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*b</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3214</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4D3"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*b</Address>
                     </CheatEntry>
@@ -1807,7 +1702,6 @@ writeBytes('food', 0)
                       <ID>3215</ID>
                       <Description>"------- ITEM 33 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D4D8"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*c</Address>
@@ -1815,7 +1709,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3216</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D4DC"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*c</Address>
@@ -1823,21 +1716,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3217</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4DE"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*c</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3218</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4DA"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*c</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3219</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4DB"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*c</Address>
                     </CheatEntry>
@@ -1845,7 +1735,6 @@ writeBytes('food', 0)
                       <ID>3220</ID>
                       <Description>"------- ITEM 34 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D4E0"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*d</Address>
@@ -1853,7 +1742,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3221</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D4E4"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*d</Address>
@@ -1861,21 +1749,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3222</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4E6"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*d</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3223</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4E2"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*d</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3224</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4E3"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*d</Address>
                     </CheatEntry>
@@ -1883,7 +1768,6 @@ writeBytes('food', 0)
                       <ID>3225</ID>
                       <Description>"------- ITEM 35 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D4E8"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*e</Address>
@@ -1891,7 +1775,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3226</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D4EC"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*e</Address>
@@ -1899,21 +1782,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3227</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4EE"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*e</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3228</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4EA"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*e</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3229</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4EB"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*e</Address>
                     </CheatEntry>
@@ -1921,7 +1801,6 @@ writeBytes('food', 0)
                       <ID>3230</ID>
                       <Description>"------- ITEM 36 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D4F0"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*f</Address>
@@ -1929,7 +1808,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3231</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D4F4"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*f</Address>
@@ -1937,21 +1815,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3232</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4F6"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*f</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3233</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4F2"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*f</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3234</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4F3"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*f</Address>
                     </CheatEntry>
@@ -1959,7 +1834,6 @@ writeBytes('food', 0)
                       <ID>3235</ID>
                       <Description>"------- ITEM 37 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D4F8"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*10</Address>
@@ -1967,7 +1841,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3236</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D4FC"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*10</Address>
@@ -1975,21 +1848,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3237</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4FE"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*10</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3238</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4FA"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*10</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3239</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D4FB"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*10</Address>
                     </CheatEntry>
@@ -1997,7 +1867,6 @@ writeBytes('food', 0)
                       <ID>3240</ID>
                       <Description>"------- ITEM 38 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D500"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*11</Address>
@@ -2005,7 +1874,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3241</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D504"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*11</Address>
@@ -2013,21 +1881,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3242</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D506"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*11</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3243</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D502"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*11</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3244</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D503"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*11</Address>
                     </CheatEntry>
@@ -2035,7 +1900,6 @@ writeBytes('food', 0)
                       <ID>3245</ID>
                       <Description>"------- ITEM 39 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="65534" RealAddress="1E94A21D508"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*12</Address>
@@ -2043,7 +1907,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3246</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D50C"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*12</Address>
@@ -2051,21 +1914,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3247</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D50E"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*12</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3248</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D50A"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*12</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3249</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D50B"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*12</Address>
                     </CheatEntry>
@@ -2073,7 +1933,6 @@ writeBytes('food', 0)
                       <ID>3250</ID>
                       <Description>"------- ITEM 40 --------"</Description>
                       <DropDownListLink>item_table</DropDownListLink>
-                      <LastState Value="238" RealAddress="1E94A21D510"/>
                       <Color>666666</Color>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+0+8*13</Address>
@@ -2081,7 +1940,6 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3251</ID>
                       <Description>"COUNT"</Description>
-                      <LastState Value="1" RealAddress="1E94A21D514"/>
                       <VariableType>Custom</VariableType>
                       <CustomType>ACNH Count</CustomType>
                       <Address>pocket1+4+8*13</Address>
@@ -2089,21 +1947,18 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3252</ID>
                       <Description>"USES"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D516"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>pocket1+6+8*13</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3253</ID>
                       <Description>"FLAG1"</Description>
-                      <LastState Value="0" RealAddress="1E94A21D512"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+2+8*13</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3254</ID>
                       <Description>"FLAG2"</Description>
-                      <LastState Value="21" RealAddress="1E94A21D513"/>
                       <VariableType>Byte</VariableType>
                       <Address>pocket1+3+8*13</Address>
                     </CheatEntry>
@@ -2113,7 +1968,6 @@ writeBytes('food', 0)
                   <ID>3255</ID>
                   <Description>"FLAGS"</Description>
                   <Options moHideChildren="1" moDeactivateChildrenAsWell="1"/>
-                  <LastState/>
                   <Color>FF0000</Color>
                   <VariableType>Auto Assembler Script</VariableType>
                   <AssemblerScript>[ENABLE]
@@ -2126,7 +1980,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F1F20"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*20C</Address>
                     </CheatEntry>
@@ -2136,7 +1989,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F2190"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*344</Address>
                       <Hotkeys>
@@ -2168,7 +2020,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F2032"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*295</Address>
                       <Hotkeys>
@@ -2200,7 +2051,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="0" RealAddress="1E94A1F1EC6"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*1DF</Address>
                       <Hotkeys>
@@ -2232,7 +2082,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="0" RealAddress="1E94A1F1EC8"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*1E0</Address>
                       <Hotkeys>
@@ -2264,7 +2113,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F1BC4"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*5E</Address>
                     </CheatEntry>
@@ -2274,7 +2122,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="0" RealAddress="1E94A1F1BC8"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*60</Address>
                     </CheatEntry>
@@ -2284,7 +2131,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F1FCC"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*262</Address>
                     </CheatEntry>
@@ -2294,7 +2140,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F2042"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*29D</Address>
                     </CheatEntry>
@@ -2304,7 +2149,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F2044"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*29E</Address>
                     </CheatEntry>
@@ -2314,7 +2158,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F1F0A"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*201</Address>
                     </CheatEntry>
@@ -2324,7 +2167,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F1F72"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*235</Address>
                     </CheatEntry>
@@ -2334,7 +2176,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F1F74"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*236</Address>
                     </CheatEntry>
@@ -2344,7 +2185,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F1F76"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*237</Address>
                     </CheatEntry>
@@ -2354,7 +2194,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F1F78"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*238</Address>
                     </CheatEntry>
@@ -2364,7 +2203,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F1F7A"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*239</Address>
                     </CheatEntry>
@@ -2374,7 +2212,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F1F7C"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*23A</Address>
                     </CheatEntry>
@@ -2384,7 +2221,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F1F7E"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*23B</Address>
                     </CheatEntry>
@@ -2394,7 +2230,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F2010"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*284</Address>
                     </CheatEntry>
@@ -2404,7 +2239,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F1F80"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*23C</Address>
                     </CheatEntry>
@@ -2414,7 +2248,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="1" RealAddress="1E94A1F1F82"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*23D</Address>
                     </CheatEntry>
@@ -2424,7 +2257,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="0" RealAddress="1E94A1F1F84"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*23E</Address>
                       <Hotkeys>
@@ -2453,14 +2285,12 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>3272</ID>
                       <Description>"GoldenBalloonCount"</Description>
-                      <LastState Value="1" RealAddress="1E94A1F210A"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*301</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>3274</ID>
                       <Description>"GoldenAxeLearningCount"</Description>
-                      <LastState Value="42" RealAddress="1E94A1F210C"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*302</Address>
                     </CheatEntry>
@@ -2470,7 +2300,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="0" RealAddress="1E94A1F221E"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*38B</Address>
                     </CheatEntry>
@@ -2480,7 +2309,6 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="0" RealAddress="1E94A1F224C"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*3A2</Address>
                     </CheatEntry>
@@ -2490,33 +2318,27 @@ writeBytes('food', 0)
                       <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                      <LastState Value="0" RealAddress="1E94A1F2370"/>
                       <VariableType>2 Bytes</VariableType>
                       <Address>playerevents+2*434</Address>
                     </CheatEntry>
-					
-    <CheatEntry>
-      <ID>5031</ID>
-      <Description>"PrayStarToday"</Description>
-      <LastState Value="20" RealAddress="1F082412014"/>
-      <VariableType>2 Bytes</VariableType>
-      <Address>playerevents+2*0x1AE</Address>
-    </CheatEntry>
-    <CheatEntry>
-      <ID>5027</ID>
-      <Description>"TodayFortune"</Description>
-      <LastState Value="0" RealAddress="1FFEF582520"/>
-      <VariableType>2 Bytes</VariableType>
-      <Address>playerevents+2*573</Address>
-    </CheatEntry>
-    <CheatEntry>
-      <ID>5028</ID>
-      <Description>"ReserveFortune"</Description>
-      <LastState Value="0" RealAddress="1FFEF582520"/>
-      <VariableType>2 Bytes</VariableType>
-      <Address>playerevents+2*574</Address>
-    </CheatEntry>
-					
+                    <CheatEntry>
+                      <ID>5031</ID>
+                      <Description>"PrayStarToday"</Description>
+                      <VariableType>2 Bytes</VariableType>
+                      <Address>playerevents+2*0x1AE</Address>
+                    </CheatEntry>
+                    <CheatEntry>
+                      <ID>5027</ID>
+                      <Description>"TodayFortune"</Description>
+                      <VariableType>2 Bytes</VariableType>
+                      <Address>playerevents+2*573</Address>
+                    </CheatEntry>
+                    <CheatEntry>
+                      <ID>5028</ID>
+                      <Description>"ReserveFortune"</Description>
+                      <VariableType>2 Bytes</VariableType>
+                      <Address>playerevents+2*574</Address>
+                    </CheatEntry>
                   </CheatEntries>
                 </CheatEntry>
               </CheatEntries>
@@ -2525,7 +2347,6 @@ writeBytes('food', 0)
               <ID>2553</ID>
               <Description>"VILLAGERS"</Description>
               <Options moHideChildren="1"/>
-              <LastState Value="" RealAddress="00000000"/>
               <Color>FF0000</Color>
               <GroupHeader>1</GroupHeader>
               <CheatEntries>
@@ -2533,7 +2354,6 @@ writeBytes('food', 0)
                   <ID>2554</ID>
                   <Description>"------- VILLAGER 1 --------"</Description>
                   <DropDownListLink>villager_table</DropDownListLink>
-                  <LastState Value="11 04" RealAddress="1E948E69CD0"/>
                   <ShowAsHex>1</ShowAsHex>
                   <VariableType>Array of byte</VariableType>
                   <ByteLength>2</ByteLength>
@@ -2543,7 +2363,6 @@ writeBytes('food', 0)
                   <ID>2555</ID>
                   <Description>"PERSONALITIES"</Description>
                   <DropDownListLink>personality_table</DropDownListLink>
-                  <LastState Value="1" RealAddress="1E948E69CD2"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
                   <Address>villagers+2+13230*0</Address>
@@ -2551,52 +2370,43 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>2556</ID>
                   <Description>"FRIENDSHIP"</Description>
-                  <LastState Value="255" RealAddress="1E948E69D16"/>
                   <ShowAsSigned>0</ShowAsSigned>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+A+13230*0</Address>
+                  <Address>villagers+3C+A+13230*0+villagersOffset-1</Address>
                 </CheatEntry>
-				
-    <CheatEntry>
-      <ID>2691</ID>
-      <Description>"CATCHPHRASE"</Description>
-      <LastState RealAddress="26107681B5C"/>
-	  <Color>666666</Color>
-      <VariableType>String</VariableType>
-      <Length>24</Length>
-      <Unicode>1</Unicode>
-      <CodePage>0</CodePage>
-      <ZeroTerminate>1</ZeroTerminate>
-      <Address>villagers+108F4+13230*0</Address>
-    </CheatEntry>
+                <CheatEntry>
+                  <ID>2691</ID>
+                  <Description>"CATCHPHRASE"</Description>
+                  <Color>666666</Color>
+                  <VariableType>String</VariableType>
+                  <Length>24</Length>
+                  <Unicode>1</Unicode>
+                  <CodePage>0</CodePage>
+                  <ZeroTerminate>1</ZeroTerminate>
+                  <Address>villagers+108F4+13230*0</Address>
+                </CheatEntry>
                 <CheatEntry>
                   <ID>2621</ID>
                   <Description>"IS RECEIVE GIFT TODAY?"</Description>
-				  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
+                  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
 1:Yes
 </DropDownList>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+1D+13230*0</Address>
+                  <Address>villagers+3C+1D+13230*0+villagersOffset-1</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2601</ID>
                   <Description>"TALK COUNT TODAY"</Description>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+B+13230*0</Address>
+                  <Address>villagers+3C+B+13230*0+villagersOffset-1</Address>
                 </CheatEntry>
-
-
-				
                 <CheatEntry>
                   <ID>2557</ID>
                   <Description>"------- VILLAGER 2 --------"</Description>
                   <DropDownListLink>villager_table</DropDownListLink>
-                  <LastState Value="1E 08" RealAddress="1E948E7CF00"/>
                   <ShowAsHex>1</ShowAsHex>
                   <VariableType>Array of byte</VariableType>
                   <ByteLength>2</ByteLength>
@@ -2606,7 +2416,6 @@ writeBytes('food', 0)
                   <ID>2558</ID>
                   <Description>"PERSONALITIES"</Description>
                   <DropDownListLink>personality_table</DropDownListLink>
-                  <LastState Value="7" RealAddress="1E948E7CF02"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
                   <Address>villagers+2+13230*1</Address>
@@ -2614,51 +2423,42 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>2559</ID>
                   <Description>"FRIENDSHIP"</Description>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+A+13230*1</Address>
+                  <Address>villagers+3C+A+13230*1+villagersOffset-1</Address>
                 </CheatEntry>
-				
-    <CheatEntry>
-      <ID>2692</ID>
-      <Description>"CATCHPHRASE"</Description>
-      <LastState RealAddress="26107681B5C"/>
-	  <Color>666666</Color>
-      <VariableType>String</VariableType>
-      <Length>24</Length>
-      <Unicode>1</Unicode>
-      <CodePage>0</CodePage>
-      <ZeroTerminate>1</ZeroTerminate>
-      <Address>villagers+108F4+13230*1</Address>
-    </CheatEntry>
+                <CheatEntry>
+                  <ID>2692</ID>
+                  <Description>"CATCHPHRASE"</Description>
+                  <Color>666666</Color>
+                  <VariableType>String</VariableType>
+                  <Length>24</Length>
+                  <Unicode>1</Unicode>
+                  <CodePage>0</CodePage>
+                  <ZeroTerminate>1</ZeroTerminate>
+                  <Address>villagers+108F4+13230*1</Address>
+                </CheatEntry>
                 <CheatEntry>
                   <ID>2622</ID>
                   <Description>"IS RECEIVE GIFT TODAY?"</Description>
-				  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
+                  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
 1:Yes
 </DropDownList>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+1D+13230*1</Address>
+                  <Address>villagers+3C+1D+13230*1+villagersOffset-1</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2602</ID>
                   <Description>"TALK COUNT TODAY"</Description>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+B+13230*1</Address>
+                  <Address>villagers+3C+B+13230*1+villagersOffset-1</Address>
                 </CheatEntry>
-
-
-				
                 <CheatEntry>
                   <ID>2560</ID>
                   <Description>"------- VILLAGER 3 --------"</Description>
                   <DropDownListLink>villager_table</DropDownListLink>
-                  <LastState Value="0A 03" RealAddress="1E948E90130"/>
                   <ShowAsHex>1</ShowAsHex>
                   <VariableType>Array of byte</VariableType>
                   <ByteLength>2</ByteLength>
@@ -2668,7 +2468,6 @@ writeBytes('food', 0)
                   <ID>2561</ID>
                   <Description>"PERSONALITIES"</Description>
                   <DropDownListLink>personality_table</DropDownListLink>
-                  <LastState Value="0" RealAddress="1E948E90132"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
                   <Address>villagers+2+13230*2</Address>
@@ -2676,51 +2475,42 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>2562</ID>
                   <Description>"FRIENDSHIP"</Description>
-                  <LastState Value="255" RealAddress="1E948E90176"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+A+13230*2</Address>
+                  <Address>villagers+3C+A+13230*2+villagersOffset-1</Address>
                 </CheatEntry>
-				
-    <CheatEntry>
-      <ID>2693</ID>
-      <Description>"CATCHPHRASE"</Description>
-      <LastState RealAddress="26107681B5C"/>
-	  <Color>666666</Color>
-      <VariableType>String</VariableType>
-      <Length>24</Length>
-      <Unicode>1</Unicode>
-      <CodePage>0</CodePage>
-      <ZeroTerminate>1</ZeroTerminate>
-      <Address>villagers+108F4+13230*2</Address>
-    </CheatEntry>
+                <CheatEntry>
+                  <ID>2693</ID>
+                  <Description>"CATCHPHRASE"</Description>
+                  <Color>666666</Color>
+                  <VariableType>String</VariableType>
+                  <Length>24</Length>
+                  <Unicode>1</Unicode>
+                  <CodePage>0</CodePage>
+                  <ZeroTerminate>1</ZeroTerminate>
+                  <Address>villagers+108F4+13230*2</Address>
+                </CheatEntry>
                 <CheatEntry>
                   <ID>2623</ID>
                   <Description>"IS RECEIVE GIFT TODAY?"</Description>
-				  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
+                  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
 1:Yes
 </DropDownList>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+1D+13230*2</Address>
+                  <Address>villagers+3C+1D+13230*2+villagersOffset-1</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2603</ID>
                   <Description>"TALK COUNT TODAY"</Description>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+B+13230*2</Address>
+                  <Address>villagers+3C+B+13230*2+villagersOffset-1</Address>
                 </CheatEntry>
-				
-
-				
                 <CheatEntry>
                   <ID>2563</ID>
                   <Description>"------- VILLAGER 4 --------"</Description>
                   <DropDownListLink>villager_table</DropDownListLink>
-                  <LastState Value="09 07" RealAddress="1E948EA3360"/>
                   <ShowAsHex>1</ShowAsHex>
                   <VariableType>Array of byte</VariableType>
                   <ByteLength>2</ByteLength>
@@ -2730,7 +2520,6 @@ writeBytes('food', 0)
                   <ID>2564</ID>
                   <Description>"PERSONALITIES"</Description>
                   <DropDownListLink>personality_table</DropDownListLink>
-                  <LastState Value="0" RealAddress="1E948EA3362"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
                   <Address>villagers+2+13230*3</Address>
@@ -2738,50 +2527,42 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>2565</ID>
                   <Description>"FRIENDSHIP"</Description>
-                  <LastState Value="255" RealAddress="1E948EA33A6"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+A+13230*3</Address>
+                  <Address>villagers+3C+A+13230*3+villagersOffset-1</Address>
                 </CheatEntry>
-				
-    <CheatEntry>
-      <ID>2694</ID>
-      <Description>"CATCHPHRASE"</Description>
-      <LastState RealAddress="26107681B5C"/>
-	  <Color>666666</Color>
-      <VariableType>String</VariableType>
-      <Length>24</Length>
-      <Unicode>1</Unicode>
-      <CodePage>0</CodePage>
-      <ZeroTerminate>1</ZeroTerminate>
-      <Address>villagers+108F4+13230*3</Address>
-    </CheatEntry>
+                <CheatEntry>
+                  <ID>2694</ID>
+                  <Description>"CATCHPHRASE"</Description>
+                  <Color>666666</Color>
+                  <VariableType>String</VariableType>
+                  <Length>24</Length>
+                  <Unicode>1</Unicode>
+                  <CodePage>0</CodePage>
+                  <ZeroTerminate>1</ZeroTerminate>
+                  <Address>villagers+108F4+13230*3</Address>
+                </CheatEntry>
                 <CheatEntry>
                   <ID>2624</ID>
                   <Description>"IS RECEIVE GIFT TODAY?"</Description>
-				  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
+                  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
 1:Yes
 </DropDownList>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+1D+13230*3</Address>
+                  <Address>villagers+3C+1D+13230*3+villagersOffset-1</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2604</ID>
                   <Description>"TALK COUNT TODAY"</Description>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+B+13230*3</Address>
+                  <Address>villagers+3C+B+13230*3+villagersOffset-1</Address>
                 </CheatEntry>
-
-				
                 <CheatEntry>
                   <ID>2566</ID>
                   <Description>"------- VILLAGER 5 --------"</Description>
                   <DropDownListLink>villager_table</DropDownListLink>
-                  <LastState Value="1A 09" RealAddress="1E948EB6590"/>
                   <ShowAsHex>1</ShowAsHex>
                   <VariableType>Array of byte</VariableType>
                   <ByteLength>2</ByteLength>
@@ -2791,7 +2572,6 @@ writeBytes('food', 0)
                   <ID>2567</ID>
                   <Description>"PERSONALITIES"</Description>
                   <DropDownListLink>personality_table</DropDownListLink>
-                  <LastState Value="4" RealAddress="1E948EB6592"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
                   <Address>villagers+2+13230*4</Address>
@@ -2799,51 +2579,42 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>2568</ID>
                   <Description>"FRIENDSHIP"</Description>
-                  <LastState Value="255" RealAddress="1E948EB65D6"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+A+13230*4</Address>
+                  <Address>villagers+3C+A+13230*4+villagersOffset-1</Address>
                 </CheatEntry>
-				
-    <CheatEntry>
-      <ID>2695</ID>
-      <Description>"CATCHPHRASE"</Description>
-      <LastState RealAddress="26107681B5C"/>
-	  <Color>666666</Color>
-      <VariableType>String</VariableType>
-      <Length>24</Length>
-      <Unicode>1</Unicode>
-      <CodePage>0</CodePage>
-      <ZeroTerminate>1</ZeroTerminate>
-      <Address>villagers+108F4+13230*4</Address>
-    </CheatEntry>
+                <CheatEntry>
+                  <ID>2695</ID>
+                  <Description>"CATCHPHRASE"</Description>
+                  <Color>666666</Color>
+                  <VariableType>String</VariableType>
+                  <Length>24</Length>
+                  <Unicode>1</Unicode>
+                  <CodePage>0</CodePage>
+                  <ZeroTerminate>1</ZeroTerminate>
+                  <Address>villagers+108F4+13230*4</Address>
+                </CheatEntry>
                 <CheatEntry>
                   <ID>2625</ID>
                   <Description>"IS RECEIVE GIFT TODAY?"</Description>
-				  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
+                  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
 1:Yes
 </DropDownList>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+1D+13230*4</Address>
+                  <Address>villagers+3C+1D+13230*4+villagersOffset-1</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2605</ID>
                   <Description>"TALK COUNT TODAY"</Description>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+B+13230*4</Address>
+                  <Address>villagers+3C+B+13230*4+villagersOffset-1</Address>
                 </CheatEntry>
-				
-
-				
                 <CheatEntry>
                   <ID>2569</ID>
                   <Description>"------- VILLAGER 6 --------"</Description>
                   <DropDownListLink>villager_table</DropDownListLink>
-                  <LastState Value="20 11" RealAddress="1E948EC97C0"/>
                   <ShowAsHex>1</ShowAsHex>
                   <VariableType>Array of byte</VariableType>
                   <ByteLength>2</ByteLength>
@@ -2853,7 +2624,6 @@ writeBytes('food', 0)
                   <ID>2570</ID>
                   <Description>"PERSONALITIES"</Description>
                   <DropDownListLink>personality_table</DropDownListLink>
-                  <LastState Value="3" RealAddress="1E948EC97C2"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
                   <Address>villagers+2+13230*5</Address>
@@ -2861,51 +2631,42 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>2571</ID>
                   <Description>"FRIENDSHIP"</Description>
-                  <LastState Value="193" RealAddress="1E948EC9806"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+A+13230*5</Address>
+                  <Address>villagers+3C+A+13230*5+villagersOffset-1</Address>
                 </CheatEntry>
-				
-    <CheatEntry>
-      <ID>2696</ID>
-      <Description>"CATCHPHRASE"</Description>
-      <LastState RealAddress="26107681B5C"/>
-	  <Color>666666</Color>
-      <VariableType>String</VariableType>
-      <Length>24</Length>
-      <Unicode>1</Unicode>
-      <CodePage>0</CodePage>
-      <ZeroTerminate>1</ZeroTerminate>
-      <Address>villagers+108F4+13230*5</Address>
-    </CheatEntry>
+                <CheatEntry>
+                  <ID>2696</ID>
+                  <Description>"CATCHPHRASE"</Description>
+                  <Color>666666</Color>
+                  <VariableType>String</VariableType>
+                  <Length>24</Length>
+                  <Unicode>1</Unicode>
+                  <CodePage>0</CodePage>
+                  <ZeroTerminate>1</ZeroTerminate>
+                  <Address>villagers+108F4+13230*5</Address>
+                </CheatEntry>
                 <CheatEntry>
                   <ID>2626</ID>
                   <Description>"IS RECEIVE GIFT TODAY?"</Description>
-				  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
+                  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
 1:Yes
 </DropDownList>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+1D+13230*5</Address>
+                  <Address>villagers+3C+1D+13230*5+villagersOffset-1</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2606</ID>
                   <Description>"TALK COUNT TODAY"</Description>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+B+13230*5</Address>
+                  <Address>villagers+3C+B+13230*5+villagersOffset-1</Address>
                 </CheatEntry>
-
-
-				
                 <CheatEntry>
                   <ID>2572</ID>
                   <Description>"------- VILLAGER 7 --------"</Description>
                   <DropDownListLink>villager_table</DropDownListLink>
-                  <LastState Value="10 06" RealAddress="1E948EDC9F0"/>
                   <ShowAsHex>1</ShowAsHex>
                   <VariableType>Array of byte</VariableType>
                   <ByteLength>2</ByteLength>
@@ -2915,7 +2676,6 @@ writeBytes('food', 0)
                   <ID>2573</ID>
                   <Description>"PERSONALITIES"</Description>
                   <DropDownListLink>personality_table</DropDownListLink>
-                  <LastState Value="4" RealAddress="1E948EDC9F2"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
                   <Address>villagers+2+13230*6</Address>
@@ -2923,51 +2683,42 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>2574</ID>
                   <Description>"FRIENDSHIP"</Description>
-                  <LastState Value="255" RealAddress="1E948EDCA36"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+A+13230*6</Address>
+                  <Address>villagers+3C+A+13230*6+villagersOffset-1</Address>
                 </CheatEntry>
-				
-    <CheatEntry>
-      <ID>2697</ID>
-      <Description>"CATCHPHRASE"</Description>
-      <LastState RealAddress="26107681B5C"/>
-	  <Color>666666</Color>
-      <VariableType>String</VariableType>
-      <Length>24</Length>
-      <Unicode>1</Unicode>
-      <CodePage>0</CodePage>
-      <ZeroTerminate>1</ZeroTerminate>
-      <Address>villagers+108F4+13230*6</Address>
-    </CheatEntry>
+                <CheatEntry>
+                  <ID>2697</ID>
+                  <Description>"CATCHPHRASE"</Description>
+                  <Color>666666</Color>
+                  <VariableType>String</VariableType>
+                  <Length>24</Length>
+                  <Unicode>1</Unicode>
+                  <CodePage>0</CodePage>
+                  <ZeroTerminate>1</ZeroTerminate>
+                  <Address>villagers+108F4+13230*6</Address>
+                </CheatEntry>
                 <CheatEntry>
                   <ID>2627</ID>
                   <Description>"IS RECEIVE GIFT TODAY?"</Description>
-				  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
+                  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
 1:Yes
 </DropDownList>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+1D+13230*6</Address>
+                  <Address>villagers+3C+1D+13230*6+villagersOffset-1</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2607</ID>
                   <Description>"TALK COUNT TODAY"</Description>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+B+13230*6</Address>
+                  <Address>villagers+3C+B+13230*6+villagersOffset-1</Address>
                 </CheatEntry>
-
-
-				
                 <CheatEntry>
                   <ID>2575</ID>
                   <Description>"------- VILLAGER 8 --------"</Description>
                   <DropDownListLink>villager_table</DropDownListLink>
-                  <LastState Value="1A 00" RealAddress="1E948EEFC20"/>
                   <ShowAsHex>1</ShowAsHex>
                   <VariableType>Array of byte</VariableType>
                   <ByteLength>2</ByteLength>
@@ -2977,7 +2728,6 @@ writeBytes('food', 0)
                   <ID>2576</ID>
                   <Description>"PERSONALITIES"</Description>
                   <DropDownListLink>personality_table</DropDownListLink>
-                  <LastState Value="2" RealAddress="1E948EEFC22"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
                   <Address>villagers+2+13230*7</Address>
@@ -2985,51 +2735,42 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>2577</ID>
                   <Description>"FRIENDSHIP"</Description>
-                  <LastState Value="255" RealAddress="1E948EEFC66"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+A+13230*7</Address>
+                  <Address>villagers+3C+A+13230*7+villagersOffset-1</Address>
                 </CheatEntry>
-				
-    <CheatEntry>
-      <ID>2698</ID>
-      <Description>"CATCHPHRASE"</Description>
-      <LastState RealAddress="26107681B5C"/>
-	  <Color>666666</Color>
-      <VariableType>String</VariableType>
-      <Length>24</Length>
-      <Unicode>1</Unicode>
-      <CodePage>0</CodePage>
-      <ZeroTerminate>1</ZeroTerminate>
-      <Address>villagers+108F4+13230*7</Address>
-    </CheatEntry>
+                <CheatEntry>
+                  <ID>2698</ID>
+                  <Description>"CATCHPHRASE"</Description>
+                  <Color>666666</Color>
+                  <VariableType>String</VariableType>
+                  <Length>24</Length>
+                  <Unicode>1</Unicode>
+                  <CodePage>0</CodePage>
+                  <ZeroTerminate>1</ZeroTerminate>
+                  <Address>villagers+108F4+13230*7</Address>
+                </CheatEntry>
                 <CheatEntry>
                   <ID>2628</ID>
                   <Description>"IS RECEIVE GIFT TODAY?"</Description>
-				  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
+                  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
 1:Yes
 </DropDownList>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+1D+13230*7</Address>
+                  <Address>villagers+3C+1D+13230*7+villagersOffset-1</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2608</ID>
                   <Description>"TALK COUNT TODAY"</Description>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+B+13230*7</Address>
+                  <Address>villagers+3C+B+13230*7+villagersOffset-1</Address>
                 </CheatEntry>
-
-
-				
                 <CheatEntry>
                   <ID>2578</ID>
                   <Description>"------- VILLAGER 9 --------"</Description>
                   <DropDownListLink>villager_table</DropDownListLink>
-                  <LastState Value="0C 03" RealAddress="1E948F02E50"/>
                   <ShowAsHex>1</ShowAsHex>
                   <VariableType>Array of byte</VariableType>
                   <ByteLength>2</ByteLength>
@@ -3039,7 +2780,6 @@ writeBytes('food', 0)
                   <ID>2579</ID>
                   <Description>"PERSONALITIES"</Description>
                   <DropDownListLink>personality_table</DropDownListLink>
-                  <LastState Value="6" RealAddress="1E948F02E52"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
                   <Address>villagers+2+13230*8</Address>
@@ -3047,51 +2787,42 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>2580</ID>
                   <Description>"FRIENDSHIP"</Description>
-                  <LastState Value="255" RealAddress="1E948F02E96"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+A+13230*8</Address>
+                  <Address>villagers+3C+A+13230*8+villagersOffset-1</Address>
                 </CheatEntry>
-				
-    <CheatEntry>
-      <ID>2699</ID>
-      <Description>"CATCHPHRASE"</Description>
-      <LastState RealAddress="26107681B5C"/>
-	  <Color>666666</Color>
-      <VariableType>String</VariableType>
-      <Length>24</Length>
-      <Unicode>1</Unicode>
-      <CodePage>0</CodePage>
-      <ZeroTerminate>1</ZeroTerminate>
-      <Address>villagers+108F4+13230*8</Address>
-    </CheatEntry>
+                <CheatEntry>
+                  <ID>2699</ID>
+                  <Description>"CATCHPHRASE"</Description>
+                  <Color>666666</Color>
+                  <VariableType>String</VariableType>
+                  <Length>24</Length>
+                  <Unicode>1</Unicode>
+                  <CodePage>0</CodePage>
+                  <ZeroTerminate>1</ZeroTerminate>
+                  <Address>villagers+108F4+13230*8</Address>
+                </CheatEntry>
                 <CheatEntry>
                   <ID>2629</ID>
                   <Description>"IS RECEIVE GIFT TODAY?"</Description>
-				  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
+                  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
 1:Yes
 </DropDownList>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+1D+13230*8</Address>
+                  <Address>villagers+3C+1D+13230*8+villagersOffset-1</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2609</ID>
                   <Description>"TALK COUNT TODAY"</Description>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+B+13230*8</Address>
+                  <Address>villagers+3C+B+13230*8+villagersOffset-1</Address>
                 </CheatEntry>
-
-
-				
                 <CheatEntry>
                   <ID>2581</ID>
                   <Description>"------- VILLAGER 10 --------"</Description>
                   <DropDownListLink>villager_table</DropDownListLink>
-                  <LastState Value="04 05" RealAddress="1E948F16080"/>
                   <ShowAsHex>1</ShowAsHex>
                   <VariableType>Array of byte</VariableType>
                   <ByteLength>2</ByteLength>
@@ -3101,7 +2832,6 @@ writeBytes('food', 0)
                   <ID>2582</ID>
                   <Description>"PERSONALITIES"</Description>
                   <DropDownListLink>personality_table</DropDownListLink>
-                  <LastState Value="5" RealAddress="1E948F16082"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
                   <Address>villagers+2+13230*9</Address>
@@ -3109,217 +2839,187 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>2583</ID>
                   <Description>"FRIENDSHIP"</Description>
-                  <LastState Value="255" RealAddress="1E948F160C6"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+A+13230*9</Address>
+                  <Address>villagers+3C+A+13230*9+villagersOffset-1</Address>
                 </CheatEntry>
-				
-    <CheatEntry>
-      <ID>2690</ID>
-      <Description>"CATCHPHRASE"</Description>
-      <LastState RealAddress="26107681B5C"/>
-	  <Color>666666</Color>
-      <VariableType>String</VariableType>
-      <Length>24</Length>
-      <Unicode>1</Unicode>
-      <CodePage>0</CodePage>
-      <ZeroTerminate>1</ZeroTerminate>
-      <Address>villagers+108F4+13230*9</Address>
-    </CheatEntry>
+                <CheatEntry>
+                  <ID>2690</ID>
+                  <Description>"CATCHPHRASE"</Description>
+                  <Color>666666</Color>
+                  <VariableType>String</VariableType>
+                  <Length>24</Length>
+                  <Unicode>1</Unicode>
+                  <CodePage>0</CodePage>
+                  <ZeroTerminate>1</ZeroTerminate>
+                  <Address>villagers+108F4+13230*9</Address>
+                </CheatEntry>
                 <CheatEntry>
                   <ID>2620</ID>
                   <Description>"IS RECEIVE GIFT TODAY?"</Description>
-				  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
+                  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
 1:Yes
 </DropDownList>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+1D+13230*9</Address>
+                  <Address>villagers+3C+1D+13230*9+villagersOffset-1</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2600</ID>
                   <Description>"TALK COUNT TODAY"</Description>
-                  <LastState Value="255" RealAddress="1E948E7CF46"/>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
-                  <Address>villagers+3C+B+13230*9</Address>
+                  <Address>villagers+3C+B+13230*9+villagersOffset-1</Address>
                 </CheatEntry>
-
-
-				
               </CheatEntries>
             </CheatEntry>
             <CheatEntry>
               <ID>2584</ID>
               <Description>"TURNIP STOCK MARKET"</Description>
               <Options moHideChildren="1"/>
-              <LastState Value="" RealAddress="00000000"/>
               <Color>FF0000</Color>
               <GroupHeader>1</GroupHeader>
               <CheatEntries>
                 <CheatEntry>
                   <ID>2586</ID>
                   <Description>"Buy Price"</Description>
-                  <LastState Value="95" RealAddress="1E9492851EC"/>
                   <VariableType>4 Bytes</VariableType>
                   <Address>turnip</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2587</ID>
                   <Description>"SELL Monday AM"</Description>
-                  <LastState Value="85" RealAddress="1E9492851F8"/>
                   <VariableType>4 Bytes</VariableType>
                   <Address>turnip+C+4*0</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2588</ID>
                   <Description>"SELL Monday PM"</Description>
-                  <LastState Value="81" RealAddress="1E9492851FC"/>
                   <VariableType>4 Bytes</VariableType>
                   <Address>turnip+C+4*1</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2589</ID>
                   <Description>"SELL Tuesday AM"</Description>
-                  <LastState Value="76" RealAddress="1E949285200"/>
                   <VariableType>4 Bytes</VariableType>
                   <Address>turnip+C+4*2</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2590</ID>
                   <Description>"SELL Tuesday PM"</Description>
-                  <LastState Value="73" RealAddress="1E949285204"/>
                   <VariableType>4 Bytes</VariableType>
                   <Address>turnip+C+4*3</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2597</ID>
                   <Description>"SELL Wednesday AM"</Description>
-                  <LastState Value="68" RealAddress="1E949285208"/>
                   <VariableType>4 Bytes</VariableType>
                   <Address>turnip+C+4*4</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2598</ID>
                   <Description>"SELL Wednesday PM"</Description>
-                  <LastState Value="65" RealAddress="1E94928520C"/>
                   <VariableType>4 Bytes</VariableType>
                   <Address>turnip+C+4*5</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2595</ID>
                   <Description>"SELL Thursday AM"</Description>
-                  <LastState Value="60" RealAddress="1E949285210"/>
                   <VariableType>4 Bytes</VariableType>
                   <Address>turnip+C+4*6</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2596</ID>
                   <Description>"SELL Thursday PM"</Description>
-                  <LastState Value="56" RealAddress="1E949285214"/>
                   <VariableType>4 Bytes</VariableType>
                   <Address>turnip+C+4*7</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2593</ID>
                   <Description>"SELL Friday AM"</Description>
-                  <LastState Value="52" RealAddress="1E949285218"/>
                   <VariableType>4 Bytes</VariableType>
                   <Address>turnip+C+4*8</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2594</ID>
                   <Description>"SELL Friday PM"</Description>
-                  <LastState Value="48" RealAddress="1E94928521C"/>
                   <VariableType>4 Bytes</VariableType>
                   <Address>turnip+C+4*9</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2591</ID>
                   <Description>"SELL Saturday AM"</Description>
-                  <LastState Value="45" RealAddress="1E949285220"/>
                   <VariableType>4 Bytes</VariableType>
                   <Address>turnip+C+4*A</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2592</ID>
                   <Description>"SELL Saturday PM"</Description>
-                  <LastState Value="40" RealAddress="1E949285224"/>
                   <VariableType>4 Bytes</VariableType>
                   <Address>turnip+C+4*B</Address>
                 </CheatEntry>
               </CheatEntries>
             </CheatEntry>
-    <CheatEntry>
-      <ID>5000</ID>
-      <Description>"VISITOR NPCS"</Description>
-      <Options moHideChildren="1"/>
-      <LastState Value="" RealAddress="00000000"/>
-      <Color>FF0000</Color>
-      <GroupHeader>1</GroupHeader>
-      <CheatEntries>
-        <CheatEntry>
-          <ID>5002</ID>
-          <Description>"1: Monday"</Description>
-		  <DropDownListLink>visitorNPC_table</DropDownListLink>
-          <LastState Value="126" RealAddress="1DE6BE53100"/>
-          <VariableType>4 Bytes</VariableType>
-          <Address>visitorNPC+4*1</Address>
-        </CheatEntry>
-        <CheatEntry>
-          <ID>5003</ID>
-          <Description>"2: Tuesday"</Description>
-		  <DropDownListLink>visitorNPC_table</DropDownListLink>
-          <LastState Value="133" RealAddress="1DE6BE53104"/>
-          <VariableType>4 Bytes</VariableType>
-          <Address>visitorNPC+4*2</Address>
-        </CheatEntry>
-        <CheatEntry>
-          <ID>5004</ID>
-          <Description>"3: Wednesday"</Description>
-		  <DropDownListLink>visitorNPC_table</DropDownListLink>
-          <LastState Value="60" RealAddress="1DE6BE53108"/>
-          <VariableType>4 Bytes</VariableType>
-          <Address>visitorNPC+4*3</Address>
-        </CheatEntry>
-        <CheatEntry>
-          <ID>5005</ID>
-          <Description>"4: Thursday"</Description>
-		  <DropDownListLink>visitorNPC_table</DropDownListLink>
-          <LastState Value="51" RealAddress="1DE6BE5310C"/>
-          <VariableType>4 Bytes</VariableType>
-          <Address>visitorNPC+4*4</Address>
-        </CheatEntry>
-        <CheatEntry>
-          <ID>5006</ID>
-          <Description>"5: Friday"</Description>
-		  <DropDownListLink>visitorNPC_table</DropDownListLink>
-          <LastState Value="46" RealAddress="1DE6BE53110"/>
-          <VariableType>4 Bytes</VariableType>
-          <Address>visitorNPC+4*5</Address>
-        </CheatEntry>
-        <CheatEntry>
-          <ID>5007</ID>
-          <Description>"6: Saturday"</Description>
-		  <DropDownListLink>visitorNPC_table</DropDownListLink>
-          <LastState Value="123" RealAddress="1DE6BE53114"/>
-          <VariableType>4 Bytes</VariableType>
-          <Address>visitorNPC+4*6</Address>
-        </CheatEntry>
-        <CheatEntry>
-          <ID>5001</ID>
-          <Description>"0: Sunday"</Description>
-		  <DropDownListLink>visitorNPC_table</DropDownListLink>
-          <LastState Value="96" RealAddress="1DE6BE530F4"/>
-          <VariableType>4 Bytes</VariableType>
-          <Address>visitorNPC+4*0</Address>
-        </CheatEntry>
-        <CheatEntry>
-          <ID>5010</ID>
-          <Description>"Day Wisp"</Description>
-				  <DropDownList ReadOnly="1" DisplayValueAsItem="1">-1:(None)
+            <CheatEntry>
+              <ID>5000</ID>
+              <Description>"VISITOR NPCS"</Description>
+              <Options moHideChildren="1"/>
+              <Color>FF0000</Color>
+              <GroupHeader>1</GroupHeader>
+              <CheatEntries>
+                <CheatEntry>
+                  <ID>5002</ID>
+                  <Description>"1: Monday"</Description>
+                  <DropDownListLink>visitorNPC_table</DropDownListLink>
+                  <VariableType>4 Bytes</VariableType>
+                  <Address>visitorNPC+4*1</Address>
+                </CheatEntry>
+                <CheatEntry>
+                  <ID>5003</ID>
+                  <Description>"2: Tuesday"</Description>
+                  <DropDownListLink>visitorNPC_table</DropDownListLink>
+                  <VariableType>4 Bytes</VariableType>
+                  <Address>visitorNPC+4*2</Address>
+                </CheatEntry>
+                <CheatEntry>
+                  <ID>5004</ID>
+                  <Description>"3: Wednesday"</Description>
+                  <DropDownListLink>visitorNPC_table</DropDownListLink>
+                  <VariableType>4 Bytes</VariableType>
+                  <Address>visitorNPC+4*3</Address>
+                </CheatEntry>
+                <CheatEntry>
+                  <ID>5005</ID>
+                  <Description>"4: Thursday"</Description>
+                  <DropDownListLink>visitorNPC_table</DropDownListLink>
+                  <VariableType>4 Bytes</VariableType>
+                  <Address>visitorNPC+4*4</Address>
+                </CheatEntry>
+                <CheatEntry>
+                  <ID>5006</ID>
+                  <Description>"5: Friday"</Description>
+                  <DropDownListLink>visitorNPC_table</DropDownListLink>
+                  <VariableType>4 Bytes</VariableType>
+                  <Address>visitorNPC+4*5</Address>
+                </CheatEntry>
+                <CheatEntry>
+                  <ID>5007</ID>
+                  <Description>"6: Saturday"</Description>
+                  <DropDownListLink>visitorNPC_table</DropDownListLink>
+                  <VariableType>4 Bytes</VariableType>
+                  <Address>visitorNPC+4*6</Address>
+                </CheatEntry>
+                <CheatEntry>
+                  <ID>5001</ID>
+                  <Description>"0: Sunday"</Description>
+                  <DropDownListLink>visitorNPC_table</DropDownListLink>
+                  <VariableType>4 Bytes</VariableType>
+                  <Address>visitorNPC+4*0</Address>
+                </CheatEntry>
+                <CheatEntry>
+                  <ID>5010</ID>
+                  <Description>"Day Wisp"</Description>
+                  <DropDownList ReadOnly="1" DisplayValueAsItem="1">-1:(None)
 0:Sunday
 1:Monday
 2:Tuesday
@@ -3328,15 +3028,14 @@ writeBytes('food', 0)
 5:Friday
 6:Saturday
 </DropDownList>
-          <LastState Value="123" RealAddress="1DE6BE53114"/>
-		  <ShowAsSigned>1</ShowAsSigned>
-          <VariableType>4 Bytes</VariableType>
-          <Address>visitorNPC+70</Address>
-        </CheatEntry>
-        <CheatEntry>
-          <ID>5011</ID>
-          <Description>"Day Celeste"</Description>
-				  <DropDownList ReadOnly="1" DisplayValueAsItem="1">-1:(None)
+                  <ShowAsSigned>1</ShowAsSigned>
+                  <VariableType>4 Bytes</VariableType>
+                  <Address>visitorNPC+70</Address>
+                </CheatEntry>
+                <CheatEntry>
+                  <ID>5011</ID>
+                  <Description>"Day Celeste"</Description>
+                  <DropDownList ReadOnly="1" DisplayValueAsItem="1">-1:(None)
 0:Sunday
 1:Monday
 2:Tuesday
@@ -3345,18 +3044,16 @@ writeBytes('food', 0)
 5:Friday
 6:Saturday
 </DropDownList>
-          <LastState Value="123" RealAddress="1DE6BE53114"/>
-		  <ShowAsSigned>1</ShowAsSigned>
-          <VariableType>4 Bytes</VariableType>
-          <Address>visitorNPC+74</Address>
-        </CheatEntry>
-      </CheatEntries>
-    </CheatEntry>
+                  <ShowAsSigned>1</ShowAsSigned>
+                  <VariableType>4 Bytes</VariableType>
+                  <Address>visitorNPC+74</Address>
+                </CheatEntry>
+              </CheatEntries>
+            </CheatEntry>
             <CheatEntry>
               <ID>4127</ID>
               <Description>"ISLANDFLAGS"</Description>
               <Options moHideChildren="1"/>
-              <LastState Value="" RealAddress="00000000"/>
               <Color>FF0000</Color>
               <GroupHeader>1</GroupHeader>
               <CheatEntries>
@@ -3366,7 +3063,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E9490740CC"/>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*2</Address>
                 </CheatEntry>
@@ -3376,7 +3072,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="0" RealAddress="1E9490741B4"/>
                   <ShowAsSigned>0</ShowAsSigned>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*76</Address>
@@ -3387,7 +3082,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="0" RealAddress="1E949074284"/>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*DE</Address>
                 </CheatEntry>
@@ -3397,7 +3091,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="0" RealAddress="1E9490742D6"/>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*107</Address>
                 </CheatEntry>
@@ -3407,7 +3100,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E9490742F0"/>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*114</Address>
                 </CheatEntry>
@@ -3417,7 +3109,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="0" RealAddress="1E9490742F2"/>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*115</Address>
                 </CheatEntry>
@@ -3427,7 +3118,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="0" RealAddress="1E949074312"/>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*125</Address>
                 </CheatEntry>
@@ -3437,7 +3127,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E94907435A"/>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*149</Address>
                 </CheatEntry>
@@ -3447,7 +3136,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E94907435C"/>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*14A</Address>
                 </CheatEntry>
@@ -3457,7 +3145,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E949074402"/>
                   <ShowAsSigned>0</ShowAsSigned>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*1B5</Address>
@@ -3468,7 +3155,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E949074366"/>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*14F</Address>
                 </CheatEntry>
@@ -3478,7 +3164,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E949074368"/>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*150</Address>
                 </CheatEntry>
@@ -3488,7 +3173,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E94907436A"/>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*151</Address>
                 </CheatEntry>
@@ -3498,7 +3182,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E94907436C"/>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*152</Address>
                 </CheatEntry>
@@ -3508,7 +3191,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E9490743F0"/>
                   <ShowAsSigned>0</ShowAsSigned>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*194</Address>
@@ -3519,7 +3201,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E949074400"/>
                   <ShowAsSigned>0</ShowAsSigned>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*19C</Address>
@@ -3530,7 +3211,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E949074402"/>
                   <ShowAsSigned>0</ShowAsSigned>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*19D</Address>
@@ -3541,7 +3221,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E949074402"/>
                   <ShowAsSigned>0</ShowAsSigned>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*19E</Address>
@@ -3552,7 +3231,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E949074402"/>
                   <ShowAsSigned>0</ShowAsSigned>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*1A2</Address>
@@ -3563,7 +3241,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E949074402"/>
                   <ShowAsSigned>0</ShowAsSigned>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*1AD</Address>
@@ -3574,7 +3251,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E949074402"/>
                   <ShowAsSigned>0</ShowAsSigned>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*1B6</Address>
@@ -3585,7 +3261,6 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E949074402"/>
                   <ShowAsSigned>0</ShowAsSigned>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*1E0</Address>
@@ -3596,41 +3271,34 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:False
 1:True
 </DropDownList>
-                  <LastState Value="1" RealAddress="1E949074402"/>
                   <ShowAsSigned>0</ShowAsSigned>
                   <VariableType>2 Bytes</VariableType>
                   <Address>landflags+2*1F3</Address>
                 </CheatEntry>
-				
-    <CheatEntry>
-      <ID>5029</ID>
-      <Description>"CampRandomSelectMoveOutNpc"</Description>
-      <LastState Value="0" RealAddress="2D10F9C1EFA"/>
-      <VariableType>2 Bytes</VariableType>
-      <Address>landflags+2*0x121</Address>
-    </CheatEntry>
-    <CheatEntry>
-      <ID>5030</ID>
-      <Description>"CampTodaySelectMoveOutNpc"</Description>
-      <LastState Value="0" RealAddress="2D10F9C1F1A"/>
-      <VariableType>2 Bytes</VariableType>
-      <Address>landflags+2*0x131</Address>
-    </CheatEntry>
-				
+                <CheatEntry>
+                  <ID>5029</ID>
+                  <Description>"CampRandomSelectMoveOutNpc"</Description>
+                  <VariableType>2 Bytes</VariableType>
+                  <Address>landflags+2*0x121</Address>
+                </CheatEntry>
+                <CheatEntry>
+                  <ID>5030</ID>
+                  <Description>"CampTodaySelectMoveOutNpc"</Description>
+                  <VariableType>2 Bytes</VariableType>
+                  <Address>landflags+2*0x131</Address>
+                </CheatEntry>
               </CheatEntries>
             </CheatEntry>
             <CheatEntry>
               <ID>3834</ID>
               <Description>"DEBUG"</Description>
               <Options moHideChildren="1"/>
-              <LastState Value="" RealAddress="00000000"/>
               <Color>008080</Color>
               <GroupHeader>1</GroupHeader>
               <CheatEntries>
                 <CheatEntry>
                   <ID>3835</ID>
                   <Description>"Villagers"</Description>
-                  <LastState Value="17" RealAddress="1E948E69CD0"/>
                   <VariableType>Byte</VariableType>
                   <Address>villagers</Address>
                 </CheatEntry>
@@ -3638,14 +3306,12 @@ writeBytes('food', 0)
                   <ID>3837</ID>
                   <Description>"ITEMDETAILS"</Description>
                   <Options moHideChildren="1"/>
-                  <LastState Value="" RealAddress="00000000"/>
                   <Color>FF0000</Color>
                   <GroupHeader>1</GroupHeader>
                   <CheatEntries>
                     <CheatEntry>
                       <ID>4128</ID>
                       <Description>"------- ITEM TYPE 1 --------"</Description>
-                      <LastState RealAddress="1E964FB463C"/>
                       <Color>666666</Color>
                       <VariableType>String</VariableType>
                       <Length>20</Length>
@@ -3657,14 +3323,12 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>4129</ID>
                       <Description>"stack size"</Description>
-                      <LastState Value="0" RealAddress="1E964FB4624"/>
                       <VariableType>Byte</VariableType>
                       <Address>items+18+90*0</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4130</ID>
                       <Description>"------- ITEM TYPE 2 --------"</Description>
-                      <LastState RealAddress="1E964FB46CC"/>
                       <Color>666666</Color>
                       <VariableType>String</VariableType>
                       <Length>20</Length>
@@ -3676,14 +3340,12 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>4131</ID>
                       <Description>"stack size"</Description>
-                      <LastState Value="0" RealAddress="1E964FB46B4"/>
                       <VariableType>Byte</VariableType>
                       <Address>items+18+90*1</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4132</ID>
                       <Description>"------- ITEM TYPE 3 --------"</Description>
-                      <LastState RealAddress="1E964FB475C"/>
                       <Color>666666</Color>
                       <VariableType>String</VariableType>
                       <Length>20</Length>
@@ -3695,14 +3357,12 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>4133</ID>
                       <Description>"stack size"</Description>
-                      <LastState Value="0" RealAddress="1E964FB4744"/>
                       <VariableType>Byte</VariableType>
                       <Address>items+18+90*2</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4134</ID>
                       <Description>"------- ITEM TYPE 4 --------"</Description>
-                      <LastState RealAddress="1E964FB47EC"/>
                       <Color>666666</Color>
                       <VariableType>String</VariableType>
                       <Length>20</Length>
@@ -3714,14 +3374,12 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>4135</ID>
                       <Description>"stack size"</Description>
-                      <LastState Value="0" RealAddress="1E964FB47D4"/>
                       <VariableType>Byte</VariableType>
                       <Address>items+18+90*3</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4136</ID>
                       <Description>"------- ITEM TYPE 5 --------"</Description>
-                      <LastState RealAddress="1E964FB487C"/>
                       <Color>666666</Color>
                       <VariableType>String</VariableType>
                       <Length>20</Length>
@@ -3733,14 +3391,12 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>4137</ID>
                       <Description>"stack size"</Description>
-                      <LastState Value="0" RealAddress="1E964FB4864"/>
                       <VariableType>Byte</VariableType>
                       <Address>items+18+90*4</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4138</ID>
                       <Description>"------- ITEM TYPE 6 --------"</Description>
-                      <LastState RealAddress="1E964FB490C"/>
                       <Color>666666</Color>
                       <VariableType>String</VariableType>
                       <Length>20</Length>
@@ -3752,14 +3408,12 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>4139</ID>
                       <Description>"stack size"</Description>
-                      <LastState Value="0" RealAddress="1E964FB48F4"/>
                       <VariableType>Byte</VariableType>
                       <Address>items+18+90*5</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4140</ID>
                       <Description>"------- ITEM TYPE 7 --------"</Description>
-                      <LastState RealAddress="1E964FB499C"/>
                       <Color>666666</Color>
                       <VariableType>String</VariableType>
                       <Length>20</Length>
@@ -3771,14 +3425,12 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>4141</ID>
                       <Description>"stack size"</Description>
-                      <LastState Value="0" RealAddress="1E964FB4984"/>
                       <VariableType>Byte</VariableType>
                       <Address>items+18+90*6</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4142</ID>
                       <Description>"------- ITEM TYPE 8 --------"</Description>
-                      <LastState RealAddress="1E964FB4A2C"/>
                       <Color>666666</Color>
                       <VariableType>String</VariableType>
                       <Length>20</Length>
@@ -3790,14 +3442,12 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>4143</ID>
                       <Description>"stack size"</Description>
-                      <LastState Value="0" RealAddress="1E964FB4A14"/>
                       <VariableType>Byte</VariableType>
                       <Address>items+18+90*7</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4144</ID>
                       <Description>"------- ITEM TYPE 9 --------"</Description>
-                      <LastState RealAddress="1E964FB4ABC"/>
                       <Color>666666</Color>
                       <VariableType>String</VariableType>
                       <Length>20</Length>
@@ -3809,14 +3459,12 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>4145</ID>
                       <Description>"stack size"</Description>
-                      <LastState Value="0" RealAddress="1E964FB4AA4"/>
                       <VariableType>Byte</VariableType>
                       <Address>items+18+90*8</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4146</ID>
                       <Description>"------- ITEM TYPE 10 --------"</Description>
-                      <LastState RealAddress="1E964FB4B4C"/>
                       <Color>666666</Color>
                       <VariableType>String</VariableType>
                       <Length>20</Length>
@@ -3828,29 +3476,22 @@ writeBytes('food', 0)
                     <CheatEntry>
                       <ID>4147</ID>
                       <Description>"stack size"</Description>
-                      <LastState Value="0" RealAddress="1E964FB4B34"/>
                       <VariableType>Byte</VariableType>
                       <Address>items+18+90*9</Address>
                     </CheatEntry>
                   </CheatEntries>
                 </CheatEntry>
-				
-				
-				
-				
-				
-	<CheatEntry>
-      <ID>5012</ID>
-      <Description>"UPDATED TABLES"</Description>
-      <Options moHideChildren="1"/>
-      <LastState Value="" RealAddress="00000000"/>
-      <Color>FF0000</Color>
-      <GroupHeader>1</GroupHeader>
-      <CheatEntries>
-	  <CheatEntry>
-                  <ID>4094</ID>
-                  <Description>"item_table"</Description>
-                  <DropDownList DisplayValueAsItem="1">65534:
+                <CheatEntry>
+                  <ID>5012</ID>
+                  <Description>"UPDATED TABLES"</Description>
+                  <Options moHideChildren="1"/>
+                  <Color>FF0000</Color>
+                  <GroupHeader>1</GroupHeader>
+                  <CheatEntries>
+                    <CheatEntry>
+                      <ID>4094</ID>
+                      <Description>"item_table"</Description>
+                      <DropDownList DisplayValueAsItem="1">65534:
 0:(None)
 2:scenic painting
 5:graceful painting (forgery)
@@ -14519,15 +14160,13 @@ writeBytes('food', 0)
 14985:clean-room suit (Yellow)
 14986:clean-room suit (Orange)
 </DropDownList>
-                  <VariableType>Byte</VariableType>
-                  <Address>0</Address>
-                </CheatEntry>
-				
-				
-                <CheatEntry>
-                  <ID>4100</ID>
-                  <Description>"visitorNPC_table"</Description>
-                  <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:None
+                      <VariableType>Byte</VariableType>
+                      <Address>0</Address>
+                    </CheatEntry>
+                    <CheatEntry>
+                      <ID>4100</ID>
+                      <Description>"visitorNPC_table"</Description>
+                      <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:None
 1:Gulliver
 2:Label
 3:Saharah
@@ -14540,15 +14179,13 @@ writeBytes('food', 0)
 10:Redd
 11:Gullivarrr
 </DropDownList>
-                  <VariableType>Byte</VariableType>
-                  <Address>0</Address>
-                </CheatEntry>
-				
-				
-<CheatEntry>
-                  <ID>4097</ID>
-                  <Description>"villager_table"</Description>
-                  <DropDownList DescriptionOnly="1" DisplayValueAsItem="1">00 00:Cyrano
+                      <VariableType>Byte</VariableType>
+                      <Address>0</Address>
+                    </CheatEntry>
+                    <CheatEntry>
+                      <ID>4097</ID>
+                      <Description>"villager_table"</Description>
+                      <DropDownList DescriptionOnly="1" DisplayValueAsItem="1">00 00:Cyrano
 00 01:Antonio
 00 02:Pango
 00 03:Anabelle
@@ -14963,18 +14600,11 @@ writeBytes('food', 0)
 22 0C:Audie
 23 00:
 </DropDownList>
-                  <VariableType>Byte</VariableType>
-                  <Address>0</Address>
+                      <VariableType>Byte</VariableType>
+                      <Address>0</Address>
+                    </CheatEntry>
+                  </CheatEntries>
                 </CheatEntry>
-	  
-	  
-      </CheatEntries>
-    </CheatEntry>
-	
-	
-	
-	
-	
                 <CheatEntry>
                   <ID>4095</ID>
                   <Description>"species_table"</Description>
@@ -15041,7 +14671,6 @@ writeBytes('food', 0)
 10:10
 20:20
 </DropDownList>
-                  <LastState Value="20" RealAddress="1E94A21D518"/>
                   <VariableType>Byte</VariableType>
                   <Address>pocket1+A0</Address>
                 </CheatEntry>
@@ -15052,14 +14681,12 @@ writeBytes('food', 0)
 1:1
 2:2
 </DropDownList>
-                  <LastState Value="2" RealAddress="1E94A21D5F0"/>
                   <VariableType>Byte</VariableType>
                   <Address>pocket2+C0</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>4150</ID>
                   <Description>"Wallet"</Description>
-                  <LastState Value="FE 3E DB 3C 20 39 06 26" RealAddress="1E94A21D5E8"/>
                   <ShowAsHex>1</ShowAsHex>
                   <VariableType>Array of byte</VariableType>
                   <ByteLength>8</ByteLength>
@@ -15068,7 +14695,6 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>4125</ID>
                   <Description>"Loan Payment"</Description>
-                  <LastState Value="2682409489" RealAddress="1E949145F08"/>
                   <VariableType>Custom</VariableType>
                   <CustomType>ACNH Integer</CustomType>
                   <Address>loan</Address>
@@ -15076,7 +14702,6 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>4126</ID>
                   <Description>"Loan Payment"</Description>
-                  <LastState Value="2682409489" RealAddress="1E949145F10"/>
                   <VariableType>Custom</VariableType>
                   <CustomType>ACNH Integer</CustomType>
                   <Address>loan+8</Address>
@@ -15084,7 +14709,6 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>4157</ID>
                   <Description>"Player Pointer"</Description>
-                  <LastState Value="0007400500074001" RealAddress="1E94A1E6A18"/>
                   <ShowAsHex>1</ShowAsHex>
                   <VariableType>8 Bytes</VariableType>
                   <Address>player</Address>
@@ -15092,7 +14716,6 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>4158</ID>
                   <Description>"Heap Pointer"</Description>
-                  <LastState Value="0000000000000000" RealAddress="1E89DDAB160"/>
                   <ShowAsHex>1</ShowAsHex>
                   <VariableType>8 Bytes</VariableType>
                   <Address>heap</Address>
@@ -15101,7 +14724,6 @@ writeBytes('food', 0)
                   <ID>4151</ID>
                   <Description>"Increase Maximum Bells Carried"</Description>
                   <Options moHideChildren="1" moDeactivateChildrenAsWell="1"/>
-                  <LastState/>
                   <Color>0000FF</Color>
                   <VariableType>Auto Assembler Script</VariableType>
                   <AssemblerScript>[ENABLE]
@@ -15150,7 +14772,6 @@ writeBytes( 'maxbells2', 0x81, 0xCB, 0x00, 0x00, 0x01, 0x00 )
             <CheatEntry>
               <ID>4156</ID>
               <Description>"FPS ( 2 = 30, 1 = 60, 0 = 120 )"</Description>
-              <LastState Value="2" RealAddress="1E89D499F24"/>
               <VariableType>Byte</VariableType>
               <Address>fps</Address>
             </CheatEntry>
@@ -15160,7 +14781,7 @@ writeBytes( 'maxbells2', 0x81, 0xCB, 0x00, 0x00, 0x01, 0x00 )
     </CheatEntry>
   </CheatEntries>
   <CheatCodes>
-    <CodeEntry Color="20000000">
+    <CodeEntry>
       <Description>Change of or ebx,00010000</Description>
       <AddressString>1FBA3F31FB2</AddressString>
       <Before>
@@ -15186,7 +14807,7 @@ writeBytes( 'maxbells2', 0x81, 0xCB, 0x00, 0x00, 0x01, 0x00 )
         <Byte>DA</Byte>
       </After>
     </CodeEntry>
-    <CodeEntry Color="20000000">
+    <CodeEntry>
       <Description>Change of and ebx,0000FFFF</Description>
       <AddressString>1FBA3F31FAC</AddressString>
       <Before>
@@ -15212,7 +14833,7 @@ writeBytes( 'maxbells2', 0x81, 0xCB, 0x00, 0x00, 0x01, 0x00 )
         <Byte>90</Byte>
       </After>
     </CodeEntry>
-    <CodeEntry Color="20000000">
+    <CodeEntry>
       <Description>Change of and ebx,0000FFFF</Description>
       <AddressString>1FBA3F2FCEA</AddressString>
       <Before>
@@ -15238,7 +14859,7 @@ writeBytes( 'maxbells2', 0x81, 0xCB, 0x00, 0x00, 0x01, 0x00 )
         <Byte>01</Byte>
       </After>
     </CodeEntry>
-    <CodeEntry Color="20000000">
+    <CodeEntry>
       <Description>Change of or ebx,00010000</Description>
       <AddressString>1FBA3F2FCF0</AddressString>
       <Before>
@@ -15264,7 +14885,7 @@ writeBytes( 'maxbells2', 0x81, 0xCB, 0x00, 0x00, 0x01, 0x00 )
         <Byte>DA</Byte>
       </After>
     </CodeEntry>
-    <CodeEntry Color="20000000">
+    <CodeEntry>
       <Description>Change of and eax,0000FFFF</Description>
       <AddressString>1FBA3E27917</AddressString>
       <Before>
@@ -15290,7 +14911,7 @@ writeBytes( 'maxbells2', 0x81, 0xCB, 0x00, 0x00, 0x01, 0x00 )
         <Byte>01</Byte>
       </After>
     </CodeEntry>
-    <CodeEntry Color="20000000">
+    <CodeEntry>
       <Description>Change of or eax,00010000</Description>
       <AddressString>1FBA3E2791D</AddressString>
       <Before>
@@ -15316,7 +14937,7 @@ writeBytes( 'maxbells2', 0x81, 0xCB, 0x00, 0x00, 0x01, 0x00 )
         <Byte>89</Byte>
       </After>
     </CodeEntry>
-    <CodeEntry Color="20000000">
+    <CodeEntry>
       <Description>Change of and ebp,0000FFFF</Description>
       <AddressString>1FBA3DDF4CF</AddressString>
       <Before>
@@ -15342,7 +14963,7 @@ writeBytes( 'maxbells2', 0x81, 0xCB, 0x00, 0x00, 0x01, 0x00 )
         <Byte>01</Byte>
       </After>
     </CodeEntry>
-    <CodeEntry Color="20000000">
+    <CodeEntry>
       <Description>Change of or ebp,00010000</Description>
       <AddressString>1FBA3DDF4D5</AddressString>
       <Before>
@@ -15368,7 +14989,7 @@ writeBytes( 'maxbells2', 0x81, 0xCB, 0x00, 0x00, 0x01, 0x00 )
         <Byte>E8</Byte>
       </After>
     </CodeEntry>
-    <CodeEntry Color="20000000">
+    <CodeEntry>
       <Description>Change of or ebx,00010000</Description>
       <AddressString>1FBA3A7625F</AddressString>
       <Before>
@@ -15394,7 +15015,7 @@ writeBytes( 'maxbells2', 0x81, 0xCB, 0x00, 0x00, 0x01, 0x00 )
         <Byte>DA</Byte>
       </After>
     </CodeEntry>
-    <CodeEntry Color="20000000">
+    <CodeEntry>
       <Description>Change of and ebx,0000FFFF</Description>
       <AddressString>1FBA3A76259</AddressString>
       <Before>
@@ -15433,10 +15054,6 @@ writeBytes( 'maxbells2', 0x81, 0xCB, 0x00, 0x00, 0x01, 0x00 )
     <SymbolEntry>
       <Name>_base</Name>
       <Address>24D0AE43052</Address>
-    </SymbolEntry>
-    <SymbolEntry>
-      <Name>heap</Name>
-      <Address>heapaddress - A1FD28 + 8B1E0 + 12CFCA8</Address>
     </SymbolEntry>
   </UserdefinedSymbols>
   <LuaScript>PROCESS_NAME = 'Yuzu.exe'
