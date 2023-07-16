@@ -9,8 +9,8 @@
       <VariableType>Auto Assembler Script</VariableType>
       <AssemblerScript>{ Game   : Animal Crossing New Horizon
   Version: 2.0.6
-  Date   : 2022-12-03
-  Author : CJB/Snivy_Lei
+  Date   : 2023-07-17
+  Author : CJB / Arashi_Lei
 }
 
 [ENABLE]
@@ -23,7 +23,7 @@ local rSize = 0x100000000
 local rStart = 0
 local rEnd = 0
 
-if process == 'Ryujinx.exe' then rSize = 0x30E5FF000 end -- CHANGED
+if emulatorType() == 2 then rSize = 0x40AC04000 end -- ADDED 0x30E5FF000
 
 for index, region in ipairs( enumMemoryRegions() ) do
   if region.RegionSize == rSize then
@@ -35,15 +35,15 @@ end
 
 heapaddress = rStart
 
-if process == 'yuzu.exe' then
+if emulatorType() == 1 then -- process == 'yuzu.exe'
   heapaddress = ( heapaddress + 0x40000000 )
-elseif process == 'Ryujinx.exe' then
+elseif emulatorType() == 2 then -- process == 'Ryujinx.exe'
   -- heapaddress = ( heapaddress - 0x40000000 )
-  heapaddress = ( heapaddress - 0x7F7605000 )
-  -- Changed
+  heapaddress = ( heapaddress - 0xC6E00000 ) -- 0x7F7605000
+  -- EDITED
 end
 
--- CHANGED --
+-- ADDED --
 unregisterSymbol('heap_bak')
 registerSymbol('heap_bak','heapaddress')
 
@@ -69,14 +69,16 @@ heap_bAdr = 'heapaddress - A1FD28 + 8B1E0 + 12CFCA8 + 3000 + 13EC248 + 1570F68 +
 unregisterSymbol('heap')
 registerSymbol('heap',heap_bAdr..string.format('+%X',heapOffset))
 
-if readInteger('heap + AC43C4C8 - C10 + B0B8') == 0 then -- personalid
+local personalid = readInteger('heap + AC43C4C8 - C10 + B0B8')
+if ((not personalid) or (personalid == 0)) then
   heapOffset = 0
+  unregisterSymbol('heap')
   registerSymbol('heap',heap_bAdr..string.format('+%X',heapOffset))
 end
 writeQword('heapOffsetMem', heapOffset)
 
 -- registerSymbol('heap','heapaddress - A1FD28 + 8B1E0 + 12CFCA8 + 3000 + 13EC248 + 1570F68 + 11000 + 400000 - 40000000')
--- Changed: ADD - A1FD28 + 8B1E0 + 12CFCA8 + 3000 + 13EC248 + 1570F68 + 11000 + 400000 - 40000000
+-- EDIT ADDED - A1FD28 + 8B1E0 + 12CFCA8 + 3000 + 13EC248 + 1570F68 + 11000 + 400000 - 40000000
 
 CheatTimerInterval = 100
 CheatTimer = nil
@@ -87,13 +89,14 @@ cht04 = nil
 cht05 = nil
 
 local function CheatTimer_tick( timer )
-  if not getAddress('heap') and getAddress('heap') == 0 then return end
-  
-  -- CHANGED --
+  if ((not getAddress('heap')) or getAddress('heap') == 0) then return end
+
+  -- ADDED --
   heapOffset = readQword('heapOffsetMem')
   if heapOffset == nil then heapOffset = last_heapOffset end
   if last_heapOffset ~= heapOffset then
     last_heapOffset = heapOffset
+    unregisterSymbol('heap')
     registerSymbol('heap',heap_bAdr..string.format('+%X',heapOffset))
     unregisterSymbol('player')
   end
@@ -111,11 +114,11 @@ local function CheatTimer_tick( timer )
   -- ---------- --
 
   if( readQword('player') == nil ) then
-  
+
     unregisterSymbol('fps')
-    -- Changed --
-    if process == 'Ryujinx.exe' then
-      registerSymbol('fps', 'heapaddress + 29F24 - 40000000')
+    -- EDITED --
+    if emulatorType() == 2 then -- process == 'Ryujinx.exe'
+      registerSymbol('fps', 'heapaddress + 29F24') -- - 40000000
     else
       registerSymbol('fps', 'heapaddress + 29F24')
     end
@@ -123,34 +126,44 @@ local function CheatTimer_tick( timer )
 
     unregisterSymbol('island')
     registerSymbol('island', 'heap + AAE9EAD8 - 160 - 6D420 + 28D4F8 - 1B4FC8' )
-    -- Changed: ADD - 160 - 6D420 + 28D4F8 - 1B4FC8
+    -- EDIT ADDED - 160 - 6D420 + 28D4F8 - 1B4FC8
 
     unregisterSymbol('player')
-	registerSymbol('player', 'heap + AC43C4C8 - C10'..string.format('+%X',playerOffset))
-    -- registerSymbol('player', 'heap + AC43C4C8 - C10')
-	-- Changed: ADD - C10
+    registerSymbol('player', 'heap + AC43C4C8 - C10'..string.format('+%X',playerOffset))
+	-- registerSymbol('player', 'heap + AC43C4C8 - C10')
+	-- EDIT ADDED - C10
 
+	--[[
     unregisterSymbol('items')
-    registerSymbol('items', 'heap + C72094AC')
+    registerSymbol('items', 'heap + C72094AC - A6AB283')
+    -- EDIT ADDED - A6AB283
+	]]
+    unregisterSymbol('items')
+    registerSymbol('items', 'heap + C72094AC - A6AB283')
+    if readQword('items+30+98*0') ~= 0x6C6C61576D6F6F52 then -- ITEM TYPE 1
+      unregisterSymbol('items')
+      registerSymbol('items', 'heap + C72094AC - A6AB283 - 80000000')
+    end
+	-------------------------------------------------------------------------
 
     unregisterSymbol('food')
     registerSymbol('food', 'heap + B4A11180 - 180 - 699F0 + BA1028 - 1F825F0')
-    -- Changed: ADD - 180 - 699F0 + BA1028 - 1F825F0
+    -- EDIT ADDED - 180 - 699F0 + BA1028 - 1F825F0
 
     unregisterSymbol('RecycleBin')
     registerSymbol('RecycleBin', 'island + ACA0A0 - 2104C0')
-	-- Changed: ADD - 2104C0
+	-- EDIT ADDED - 2104C0
 
     unregisterSymbol('villagers')
     registerSymbol('villagers', 'island + 120')
 
     unregisterSymbol('landflags')
     registerSymbol('landflags', 'island + 20191C - 800 + 93FC + 247E8')
-	-- Changed: ADD + 93FC + 247E8
+	-- EDIT ADDED + 93FC + 247E8
 
     unregisterSymbol('turnip')
     registerSymbol('turnip', 'island + 412060 + 95DC + 42D20')
-	-- Changed: ADD + 95DC + 42D20
+	-- EDIT ADDED + 95DC + 42D20
 
     unregisterSymbol('loan')
     registerSymbol('loan', 'island + 2DC358')
@@ -163,7 +176,7 @@ local function CheatTimer_tick( timer )
 
     unregisterSymbol('pocket1')
     registerSymbol('pocket1', 'player + 35E50 + C10')
-	-- Changed: ADD + C10
+	-- EDIT ADDED + C10
 
     unregisterSymbol('pocket2')
     registerSymbol('pocket2', 'pocket1 + B8')
@@ -173,21 +186,21 @@ local function CheatTimer_tick( timer )
 
     unregisterSymbol('bank')
     registerSymbol('bank', 'player + 6A424 + C10 - 12050 + 2568')
-	-- Changed: ADD + C10 - 12050 + 2568
+	-- EDIT ADDED + C10 - 12050 + 2568
 
     unregisterSymbol('nookmiles')
     registerSymbol('nookmiles', 'player + 11588')
 
     unregisterSymbol('tooluses')
     registerSymbol('tooluses', 'player + 12C6')
-	
-	-- CHANGED --
+
+	-- ADDED --
 	unregisterSymbol('poki')
     registerSymbol('poki', 'heap + AE095600') -- player + 1C59D48
-	
+
 	unregisterSymbol('visitorNPC')
     registerSymbol('visitorNPC', 'island + 462158')
-	
+
     if (readQword('player') ~= nil) then
       local al = getAddressList()
       for i=0, al.Count-1 do al[i].reinterpret() end
@@ -218,14 +231,17 @@ local function CheatTimer_tick( timer )
     writeBytes( 'tooluses', 0 )
   end
 
+  -- EDITED
+  --[[
   if ( cht04 or cht02 ) then
-    for i = 1,120 do
-      local s = readBytes( 'items+18+90*'..string.format('%x',i-1), 1 )
+    for i = 1,182 do -- 120→182
+      local s = readBytes( 'items+17+98*'..string.format('%x',i-1), 1 ) -- items+18+90
       if s &gt; 0 and s &lt; 255 then
-        writeBytes( 'items+18+90*'..string.format('%x',i-1), 200 )
+        writeBytes( 'items+17+98*'..string.format('%x',i-1), 200 ) -- items+18+90
       end
     end
   end
+  ]]--
 
   if ( cht05 ) then
     writeBytes( 'food', 2 )
@@ -266,7 +282,7 @@ unregisterSymbol('bank')
 unregisterSymbol('nookmiles')
 unregisterSymbol('tooluses')
 
--- CHANGED --
+-- ADDED --
 unregisterSymbol('poki')
 unregisterSymbol('visitorNPC')
 
@@ -290,7 +306,7 @@ villagersOffset = 0
           <CheatEntries>
             <CheatEntry>
               <ID>5033</ID>
-              <Description>"HEAP OFFSET (change when value abnormal)"</Description>
+              <Description>"HEAP OFFSET ( change when value abnormal )"</Description>
               <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">FFFFFFFF80000000:-0x80000000
 FFFFFFFFC0000000:-0x40000000 (Default)
 0000000000000000:0 (Probably)
@@ -305,7 +321,7 @@ FFFFFFFFC0000000:-0x40000000 (Default)
             </CheatEntry>
             <CheatEntry>
               <ID>5034</ID>
-              <Description>"PLAYER OFFSET (change to switch profiles)"</Description>
+              <Description>"PLAYER OFFSET ( change to switch profiles )"</Description>
               <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:Ｐ１
 1:Ｐ２
 2:Ｐ３
@@ -329,7 +345,7 @@ FFFFFFFFC0000000:-0x40000000 (Default)
               <CheatEntries>
                 <CheatEntry>
                   <ID>784</ID>
-                  <Description>"Infinite Bells"</Description>
+                  <Description>"Infinite Bells ( to 50000 )"</Description>
                   <Color>FF0000</Color>
                   <VariableType>Auto Assembler Script</VariableType>
                   <AssemblerScript>[ENABLE]
@@ -367,7 +383,7 @@ cht03 = false
                 </CheatEntry>
                 <CheatEntry>
                   <ID>787</ID>
-                  <Description>"Infinite Base Resources"</Description>
+                  <Description>"Infinite Base Resources ( to 99 )"</Description>
                   <Color>FF0000</Color>
                   <VariableType>Auto Assembler Script</VariableType>
                   <AssemblerScript>[ENABLE]
@@ -376,6 +392,11 @@ if syntaxcheck then return end
 
 cht02 = true
 
+-- ADDED
+local rec = getAddressList().getMemoryRecordByDescription("Increased Stack Sizes ( to 200 )")
+rec.Active = true
+-----------------------------------------------------------------------------------
+
 {$asm}
 [DISABLE]
 {$lua}
@@ -383,10 +404,18 @@ if syntaxcheck then return end
 
 cht02 = false
 </AssemblerScript>
+                  <CheatEntries>
+                    <CheatEntry>
+                      <ID>5035</ID>
+                      <Description>"This will also enable "Increased Stack Sizes"."</Description>
+                      <Color>800080</Color>
+                      <GroupHeader>1</GroupHeader>
+                    </CheatEntry>
+                  </CheatEntries>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>2844</ID>
-                  <Description>"Increased Stack Sizes"</Description>
+                  <Description>"Increased Stack Sizes ( to 200 )"</Description>
                   <Color>FF0000</Color>
                   <VariableType>Auto Assembler Script</VariableType>
                   <AssemblerScript>[ENABLE]
@@ -395,6 +424,15 @@ if syntaxcheck then return end
 
 cht04 = true
 
+-- ADDED
+for i = 1,182 do -- 120→182
+  local s = readBytes( 'items+17+98*'..string.format('%x',i-1), 1 ) -- items+18+90
+  if s &gt; 0 and s &lt; 255 then
+    writeBytes( 'items+17+98*'..string.format('%x',i-1), 200 ) -- items+18+90
+  end
+end
+-----------------------------------------------------------------------------------
+
 {$asm}
 [DISABLE]
 {$lua}
@@ -402,6 +440,20 @@ if syntaxcheck then return end
 
 cht04 = false
 </AssemblerScript>
+                  <CheatEntries>
+                    <CheatEntry>
+                      <ID>5036</ID>
+                      <Description>"This effect will remain until the game restarts."</Description>
+                      <Color>800080</Color>
+                      <GroupHeader>1</GroupHeader>
+                    </CheatEntry>
+                    <CheatEntry>
+                      <ID>5037</ID>
+                      <Description>"Items that exceed stacking size will only leave ONE."</Description>
+                      <Color>0000FF</Color>
+                      <GroupHeader>1</GroupHeader>
+                    </CheatEntry>
+                  </CheatEntries>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>3529</ID>
@@ -486,14 +538,14 @@ writeBytes('food', 0)
                 </CheatEntry>
                 <CheatEntry>
                   <ID>4159</ID>
-                  <Description>"Poki Carrying (Current)"</Description>
+                  <Description>"Poki Carrying ( profile being played )"</Description>
                   <VariableType>Custom</VariableType>
                   <CustomType>ACNH Integer</CustomType>
                   <Address>poki</Address>
                 </CheatEntry>
                 <CheatEntry>
                   <ID>5032</ID>
-                  <Description>"Poki Savings (Current)"</Description>
+                  <Description>"Poki Savings ( profile being played )"</Description>
                   <VariableType>Custom</VariableType>
                   <CustomType>ACNH Integer</CustomType>
                   <Address>poki+0x10</Address>
@@ -2839,6 +2891,7 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>2583</ID>
                   <Description>"FRIENDSHIP"</Description>
+                  <ShowAsSigned>0</ShowAsSigned>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
                   <Address>villagers+3C+A+13230*9+villagersOffset-1</Address>
@@ -2860,6 +2913,7 @@ writeBytes('food', 0)
                   <DropDownList ReadOnly="1" DescriptionOnly="1" DisplayValueAsItem="1">0:No
 1:Yes
 </DropDownList>
+                  <ShowAsSigned>0</ShowAsSigned>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
                   <Address>villagers+3C+1D+13230*9+villagersOffset-1</Address>
@@ -2867,6 +2921,7 @@ writeBytes('food', 0)
                 <CheatEntry>
                   <ID>2600</ID>
                   <Description>"TALK COUNT TODAY"</Description>
+                  <ShowAsSigned>0</ShowAsSigned>
                   <Color>666666</Color>
                   <VariableType>Byte</VariableType>
                   <Address>villagers+3C+B+13230*9+villagersOffset-1</Address>
@@ -3318,13 +3373,13 @@ writeBytes('food', 0)
                       <Unicode>0</Unicode>
                       <CodePage>1</CodePage>
                       <ZeroTerminate>1</ZeroTerminate>
-                      <Address>items+30+90*0</Address>
+                      <Address>items+30+98*0</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4129</ID>
                       <Description>"stack size"</Description>
                       <VariableType>Byte</VariableType>
-                      <Address>items+18+90*0</Address>
+                      <Address>items+17+98*0</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4130</ID>
@@ -3335,13 +3390,13 @@ writeBytes('food', 0)
                       <Unicode>0</Unicode>
                       <CodePage>1</CodePage>
                       <ZeroTerminate>1</ZeroTerminate>
-                      <Address>items+30+90*1</Address>
+                      <Address>items+30+98*1</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4131</ID>
                       <Description>"stack size"</Description>
                       <VariableType>Byte</VariableType>
-                      <Address>items+18+90*1</Address>
+                      <Address>items+17+98*1</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4132</ID>
@@ -3352,13 +3407,13 @@ writeBytes('food', 0)
                       <Unicode>0</Unicode>
                       <CodePage>1</CodePage>
                       <ZeroTerminate>1</ZeroTerminate>
-                      <Address>items+30+90*2</Address>
+                      <Address>items+30+98*2</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4133</ID>
                       <Description>"stack size"</Description>
                       <VariableType>Byte</VariableType>
-                      <Address>items+18+90*2</Address>
+                      <Address>items+17+98*2</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4134</ID>
@@ -3369,13 +3424,13 @@ writeBytes('food', 0)
                       <Unicode>0</Unicode>
                       <CodePage>1</CodePage>
                       <ZeroTerminate>1</ZeroTerminate>
-                      <Address>items+30+90*3</Address>
+                      <Address>items+30+98*3</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4135</ID>
                       <Description>"stack size"</Description>
                       <VariableType>Byte</VariableType>
-                      <Address>items+18+90*3</Address>
+                      <Address>items+17+98*3</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4136</ID>
@@ -3386,13 +3441,13 @@ writeBytes('food', 0)
                       <Unicode>0</Unicode>
                       <CodePage>1</CodePage>
                       <ZeroTerminate>1</ZeroTerminate>
-                      <Address>items+30+90*4</Address>
+                      <Address>items+30+98*4</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4137</ID>
                       <Description>"stack size"</Description>
                       <VariableType>Byte</VariableType>
-                      <Address>items+18+90*4</Address>
+                      <Address>items+17+98*4</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4138</ID>
@@ -3403,13 +3458,13 @@ writeBytes('food', 0)
                       <Unicode>0</Unicode>
                       <CodePage>1</CodePage>
                       <ZeroTerminate>1</ZeroTerminate>
-                      <Address>items+30+90*5</Address>
+                      <Address>items+30+98*5</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4139</ID>
                       <Description>"stack size"</Description>
                       <VariableType>Byte</VariableType>
-                      <Address>items+18+90*5</Address>
+                      <Address>items+17+98*5</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4140</ID>
@@ -3420,13 +3475,13 @@ writeBytes('food', 0)
                       <Unicode>0</Unicode>
                       <CodePage>1</CodePage>
                       <ZeroTerminate>1</ZeroTerminate>
-                      <Address>items+30+90*6</Address>
+                      <Address>items+30+98*6</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4141</ID>
                       <Description>"stack size"</Description>
                       <VariableType>Byte</VariableType>
-                      <Address>items+18+90*6</Address>
+                      <Address>items+17+98*6</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4142</ID>
@@ -3437,13 +3492,13 @@ writeBytes('food', 0)
                       <Unicode>0</Unicode>
                       <CodePage>1</CodePage>
                       <ZeroTerminate>1</ZeroTerminate>
-                      <Address>items+30+90*7</Address>
+                      <Address>items+30+98*7</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4143</ID>
                       <Description>"stack size"</Description>
                       <VariableType>Byte</VariableType>
-                      <Address>items+18+90*7</Address>
+                      <Address>items+17+98*7</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4144</ID>
@@ -3454,13 +3509,13 @@ writeBytes('food', 0)
                       <Unicode>0</Unicode>
                       <CodePage>1</CodePage>
                       <ZeroTerminate>1</ZeroTerminate>
-                      <Address>items+30+90*8</Address>
+                      <Address>items+30+98*8</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4145</ID>
                       <Description>"stack size"</Description>
                       <VariableType>Byte</VariableType>
-                      <Address>items+18+90*8</Address>
+                      <Address>items+17+98*8</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4146</ID>
@@ -3471,13 +3526,13 @@ writeBytes('food', 0)
                       <Unicode>0</Unicode>
                       <CodePage>1</CodePage>
                       <ZeroTerminate>1</ZeroTerminate>
-                      <Address>items+30+90*9</Address>
+                      <Address>items+30+98*9</Address>
                     </CheatEntry>
                     <CheatEntry>
                       <ID>4147</ID>
                       <Description>"stack size"</Description>
                       <VariableType>Byte</VariableType>
-                      <Address>items+18+90*9</Address>
+                      <Address>items+17+98*9</Address>
                     </CheatEntry>
                   </CheatEntries>
                 </CheatEntry>
@@ -15059,6 +15114,19 @@ writeBytes( 'maxbells2', 0x81, 0xCB, 0x00, 0x00, 0x01, 0x00 )
   <LuaScript>PROCESS_NAME = 'Yuzu.exe'
 local autoAttachTimerInterval = 500
 autoAttachTimer = nil
+
+-- ADDED
+if ((getCEVersion() &gt;= 7.5) and (getCEVersion() &lt; 7.6)) then 
+  messageDialog('Your CE version may not be supported.\n\nThere may be unresolved \"Access Violation\" issues, please use version 7.4 for the best experience.', 0, 2)
+end
+
+function emulatorType()
+  if not process then return false end
+  if string.find(string.lower(process), "yuzu") then return 1 end
+  if string.find(string.lower(process), "ryujinx") then return 2 end
+  return false
+end
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 local function cycleFullCompact(sender,force)
     local state = not(compactmenuitem.Caption == 'Compact View Mode')
